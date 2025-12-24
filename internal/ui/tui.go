@@ -301,7 +301,7 @@ func newInput(placeholder, value string) textinput.Model {
 	return ti
 }
 
-func (m Model) focusCmd() tea.Cmd {
+func (m *Model) focusCmd() tea.Cmd {
 	for _, input := range m.allInputs() {
 		input.Blur()
 	}
