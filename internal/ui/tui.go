@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/mrbooshehri/actNow/internal/engine"
 	"github.com/mrbooshehri/actNow/internal/model"
@@ -650,8 +652,7 @@ func splitByWidth(s string, start, width int) (string, string) {
 	var left, right strings.Builder
 	visible := 0
 	for i := 0; i < len(s); {
-		r := s[i]
-		if r == '\x1b' {
+		if s[i] == '\x1b' {
 			seq, n := readANSI(s[i:])
 			if visible < start {
 				left.WriteString(seq)
@@ -661,13 +662,28 @@ func splitByWidth(s string, start, width int) (string, string) {
 			i += n
 			continue
 		}
-		if visible < start {
-			left.WriteByte(r)
-		} else if visible >= start+width {
-			right.WriteByte(r)
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			if visible < start {
+				left.WriteByte(s[i])
+			} else if visible >= start+width {
+				right.WriteByte(s[i])
+			}
+			visible++
+			i++
+			continue
 		}
-		visible++
-		i++
+		rw := runewidth.RuneWidth(r)
+		if rw < 0 {
+			rw = 0
+		}
+		if visible+rw <= start {
+			left.WriteString(string(r))
+		} else if visible >= start+width {
+			right.WriteString(string(r))
+		}
+		visible += rw
+		i += size
 	}
 	return left.String(), right.String()
 }
