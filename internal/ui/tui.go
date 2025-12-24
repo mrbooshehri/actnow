@@ -359,15 +359,35 @@ func (m Model) viewList() string {
 		screenH = 24
 	}
 	boxGap := 1
+	rowGap := 1
 	boxW := (screenW - boxGap) / 2
+	if boxW < 10 {
+		boxW = 10
+	}
+	if 2*boxW+boxGap > screenW {
+		boxW = (screenW - boxGap) / 2
+		if boxW < 1 {
+			boxW = 1
+		}
+	}
 	footerLines := 1
 	if status != "" {
 		footerLines = 2
 	}
-	available := screenH - footerLines
+	available := screenH - footerLines - rowGap
+	if available < 1 {
+		available = screenH - footerLines
+		rowGap = 0
+	}
 	boxH := available / 2
-	if boxH < 3 {
-		boxH = 3
+	if boxH < 5 {
+		boxH = 5
+	}
+	if 2*boxH+rowGap+footerLines > screenH {
+		boxH = (screenH - footerLines - rowGap) / 2
+		if boxH < 3 {
+			boxH = 3
+		}
 	}
 
 	baseStyle := lipgloss.NewStyle().
@@ -384,9 +404,10 @@ func (m Model) viewList() string {
 	boxes := make([]string, 4)
 	for q := 0; q < 4; q++ {
 		indices := m.indicesByQuadrant(q)
-		lines := make([]string, 0, len(indices)+1)
+		lines := make([]string, 0, len(indices)+2)
 		title := strings.ToUpper(quadrants[q])
 		lines = append(lines, title)
+		lines = append(lines, "")
 		if len(indices) == 0 {
 			lines = append(lines, "(no tasks)")
 		} else {
@@ -417,7 +438,11 @@ func (m Model) viewList() string {
 
 	topRow := lipgloss.JoinHorizontal(lipgloss.Top, boxes[0], strings.Repeat(" ", boxGap), boxes[1])
 	bottomRow := lipgloss.JoinHorizontal(lipgloss.Top, boxes[2], strings.Repeat(" ", boxGap), boxes[3])
-	grid := lipgloss.JoinVertical(lipgloss.Left, topRow, bottomRow)
+	separator := strings.Repeat(" ", boxW*2+boxGap)
+	if rowGap == 0 {
+		separator = ""
+	}
+	grid := lipgloss.JoinVertical(lipgloss.Left, topRow, separator, bottomRow)
 	footerBlock := footer
 	if status != "" {
 		footerBlock = footer + "\n" + status
