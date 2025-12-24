@@ -631,6 +631,7 @@ func (m Model) viewModalBox() string {
 	b.WriteString("\n")
 	b.WriteString(m.formLine(fieldDue, "Due", m.duePicker.String()))
 	b.WriteString("\n[enter] Next  [esc] Cancel\n")
+	b.WriteString("Hints: space=toggle checkbox  h/l=segment  j/k=change  t=now  x=clear due\n")
 
 	width := m.width
 	height := m.height
