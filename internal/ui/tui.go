@@ -199,7 +199,7 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if len(fields) == 0 {
 		return m, nil
 	}
-	if m.focusIndex >= len(fields) {
+	if m.focusIndex >= len(fields) || m.focusIndex < 0 {
 		m.focusIndex = 0
 	}
 	current := fields[m.focusIndex]
@@ -229,10 +229,12 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case " ":
 		if current == fieldImportant {
 			m.important = !m.important
+			m.focusIndex = m.indexOfField(fieldImportant)
 			return m, nil
 		}
 		if current == fieldUrgent {
 			m.urgent = !m.urgent
+			m.focusIndex = m.indexOfField(fieldUrgent)
 			return m, nil
 		}
 		if current == fieldStatus {
@@ -286,6 +288,7 @@ func (m *Model) startForm(kind formKind, task model.Task) {
 	}
 	m.duePicker = newDuePicker(task.DueAt)
 	m.plannedPicker = newDuePicker(task.PlannedDate)
+	m.focusIndex = m.indexOfField(fieldTitle)
 }
 
 func newInput(placeholder, value string) textinput.Model {
@@ -580,6 +583,16 @@ func (m Model) formFields() []formField {
 	default:
 		return []formField{fieldTitle, fieldImportant, fieldUrgent, fieldDeleteReason}
 	}
+}
+
+func (m Model) indexOfField(target formField) int {
+	fields := m.formFields()
+	for i, field := range fields {
+		if field == target {
+			return i
+		}
+	}
+	return 0
 }
 
 func (m Model) currentField() *formField {
