@@ -245,6 +245,7 @@ func newInput(placeholder, value string) textinput.Model {
 	ti.Placeholder = placeholder
 	ti.SetValue(value)
 	ti.CharLimit = 200
+	ti.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 	return ti
 }
 
@@ -620,19 +621,6 @@ func (m Model) viewModalBox() string {
 		title = "Edit Task"
 	}
 
-	var b strings.Builder
-	b.WriteString(m.formLine(fieldTitle, "Title", m.inputs[0].View()))
-	b.WriteString("\n")
-	b.WriteString(m.formLine(fieldDescription, "Description", m.inputs[1].View()))
-	b.WriteString("\n")
-	b.WriteString(m.formLine(fieldImportant, "Important", checkbox(m.important)))
-	b.WriteString("\n")
-	b.WriteString(m.formLine(fieldUrgent, "Urgent", checkbox(m.urgent)))
-	b.WriteString("\n")
-	b.WriteString(m.formLine(fieldDue, "Due", m.duePicker.String()))
-	b.WriteString("\n[enter] Next  [esc] Cancel\n")
-	b.WriteString("Hints: space=toggle checkbox  h/l=segment  j/k=change  t=now  x=clear due\n")
-
 	width := m.width
 	height := m.height
 	if width == 0 || height == 0 {
@@ -651,10 +639,33 @@ func (m Model) viewModalBox() string {
 		boxH = 10
 	}
 
+	lines := []string{
+		m.formLine(fieldTitle, "Title", m.inputs[0].View()),
+		m.formLine(fieldDescription, "Description", m.inputs[1].View()),
+		m.formLine(fieldImportant, "Important", checkbox(m.important)),
+		m.formLine(fieldUrgent, "Urgent", checkbox(m.urgent)),
+		m.formLine(fieldDue, "Due", m.duePicker.String()),
+		"[enter] Next  [esc] Cancel",
+	}
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	hintLine := hintStyle.Render("Hints: space=toggle checkbox  h/l=segment  j/k=change  t=now  x=clear due")
+	innerHeight := boxH - 2
+	if innerHeight > 0 {
+		if len(lines) < innerHeight-1 {
+			pad := innerHeight - 1 - len(lines)
+			for i := 0; i < pad; i++ {
+				lines = append(lines, "")
+			}
+			lines = append(lines, hintLine)
+		} else {
+			lines = append(lines, hintLine)
+		}
+	}
+
 	border := lipgloss.RoundedBorder()
 	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-	textStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229"))
-	content := strings.TrimRight(b.String(), "\n")
+	textStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	content := strings.TrimRight(strings.Join(lines, "\n"), "\n")
 	return renderPanelBox(border, borderStyle, textStyle, boxW, boxH, title, content)
 }
 
