@@ -462,15 +462,9 @@ func renderPanelBox(border lipgloss.Border, borderStyle, textStyle lipgloss.Styl
 		if i < len(contentLines) {
 			line = contentLines[i]
 		}
-		lineRunes := []rune(line)
-		if len(lineRunes) > innerWidth {
-			lineRunes = lineRunes[:innerWidth]
-		}
-		for len(lineRunes) < innerWidth {
-			lineRunes = append(lineRunes, ' ')
-		}
+		line = fitLine(line, innerWidth)
 		b.WriteString(borderStyle.Render(border.Left))
-		b.WriteString(textStyle.Render(string(lineRunes)))
+		b.WriteString(textStyle.Render(line))
 		b.WriteString(borderStyle.Render(border.Right))
 		if i < innerHeight-1 {
 			b.WriteString("\n")
@@ -502,6 +496,18 @@ func renderTopBorder(border lipgloss.Border, borderStyle lipgloss.Style, innerWi
 		}
 	}
 	return borderStyle.Render(border.TopLeft) + borderStyle.Render(string(inner)) + borderStyle.Render(border.TopRight)
+}
+
+func fitLine(line string, width int) string {
+	if width <= 0 {
+		return line
+	}
+	line = truncate.String(line, uint(width))
+	visible := ansi.PrintableRuneWidth(line)
+	if visible >= width {
+		return line
+	}
+	return line + strings.Repeat(" ", width-visible)
 }
 
 func (m Model) viewForm() string {
