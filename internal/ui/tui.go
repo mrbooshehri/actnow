@@ -10,6 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
+	"github.com/muesli/reflow/ansi"
+	"github.com/muesli/reflow/truncate"
 
 	"github.com/mrbooshehri/actNow/internal/engine"
 	"github.com/mrbooshehri/actNow/internal/model"
@@ -593,6 +595,9 @@ func overlayCenter(base, modal string, width, height int) string {
 	if modalW == 0 || modalH == 0 {
 		return base
 	}
+	for i := range modalLines {
+		modalLines[i] = padLine(modalLines[i], modalW)
+	}
 
 	startX := (width - modalW) / 2
 	if startX < 0 {
@@ -625,7 +630,8 @@ func padLine(s string, width int) string {
 	if width <= 0 {
 		return s
 	}
-	visible := lipgloss.Width(s)
+	s = truncate.String(s, uint(width))
+	visible := ansi.PrintableRuneWidth(s)
 	if visible >= width {
 		return s
 	}
