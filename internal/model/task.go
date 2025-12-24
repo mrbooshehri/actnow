@@ -14,14 +14,20 @@ const (
 )
 
 type Task struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	Important   bool       `json:"important"`
-	Urgent      bool       `json:"urgent"`
-	DueAt       *time.Time `json:"due_at,omitempty"`
-	Status      string     `json:"status"`
-	CreatedAt   time.Time  `json:"created_at"`
+	ID             string     `json:"id"`
+	Title          string     `json:"title"`
+	Description    string     `json:"description"`
+	Important      bool       `json:"important"`
+	Urgent         bool       `json:"urgent"`
+	DueAt          *time.Time `json:"due_at,omitempty"`
+	Impact         string     `json:"impact,omitempty"`
+	NextAction     string     `json:"next_action,omitempty"`
+	PlannedDate    *time.Time `json:"planned_date,omitempty"`
+	DelegateTo     string     `json:"delegate_to,omitempty"`
+	DeleteReason   string     `json:"delete_reason,omitempty"`
+	EffortEstimate string     `json:"effort_estimate,omitempty"`
+	Status         string     `json:"status"`
+	CreatedAt      time.Time  `json:"created_at"`
 }
 
 func (t Task) IsDone() bool {

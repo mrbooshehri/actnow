@@ -33,38 +33,58 @@ const (
 )
 
 type Model struct {
-	mode         mode
-	formKind     formKind
-	inputs       []textinput.Model
-	focusIndex   int
-	store        *store.Store
-	tasks        []model.Task
-	selected     int
-	quadrant     int
-	statusMsg    string
-	statusIsErr  bool
-	editTaskID   string
-	lastSaveTime time.Time
-	width        int
-	height       int
-	important    bool
-	urgent       bool
-	duePicker    duePicker
+	mode              mode
+	formKind          formKind
+	focusIndex        int
+	store             *store.Store
+	tasks             []model.Task
+	selected          int
+	quadrant          int
+	statusMsg         string
+	statusIsErr       bool
+	editTaskID        string
+	lastSaveTime      time.Time
+	width             int
+	height            int
+	important         bool
+	urgent            bool
+	status            string
+	duePicker         duePicker
+	plannedPicker     duePicker
+	titleInput        textinput.Model
+	impactInput       textinput.Model
+	nextActionInput   textinput.Model
+	delegateInput     textinput.Model
+	deleteReasonInput textinput.Model
+	effortInput       textinput.Model
 }
 
+type formField int
+
 const (
-	fieldTitle = iota
-	fieldDescription
+	fieldStatus formField = iota
+	fieldTitle
 	fieldImportant
 	fieldUrgent
 	fieldDue
-	fieldCount
+	fieldImpact
+	fieldNextAction
+	fieldPlanned
+	fieldEffort
+	fieldDelegate
+	fieldDeleteReason
 )
 
 type duePicker struct {
 	enabled bool
 	t       time.Time
 	segment int
+}
+
+var statusOptions = []string{
+	model.StatusPending,
+	model.StatusDone,
+	model.StatusDeferred,
 }
 
 func New(store *store.Store, tasks []model.Task) Model {
@@ -175,6 +195,15 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	fields := m.formFields()
+	if len(fields) == 0 {
+		return m, nil
+	}
+	if m.focusIndex >= len(fields) {
+		m.focusIndex = 0
+	}
+	current := fields[m.focusIndex]
+
 	switch msg.String() {
 	case "esc", "ctrl+c":
 		m.mode = modeList
@@ -182,40 +211,50 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "up", "shift+tab":
 		m.focusIndex--
 		if m.focusIndex < 0 {
-			m.focusIndex = fieldCount - 1
+			m.focusIndex = len(fields) - 1
 		}
 		return m, m.focusCmd()
 	case "down", "tab":
 		m.focusIndex++
-		if m.focusIndex >= fieldCount {
+		if m.focusIndex >= len(fields) {
 			m.focusIndex = 0
 		}
 		return m, m.focusCmd()
 	case "enter":
-		if m.focusIndex >= fieldCount-1 {
+		if m.focusIndex >= len(fields)-1 {
 			return m.submitForm(), nil
 		}
 		m.focusIndex++
 		return m, m.focusCmd()
 	case " ":
-		if m.focusIndex == fieldImportant {
+		if current == fieldImportant {
 			m.important = !m.important
 			return m, nil
 		}
-		if m.focusIndex == fieldUrgent {
+		if current == fieldUrgent {
 			m.urgent = !m.urgent
 			return m, nil
 		}
-	}
-
-	if m.focusIndex == fieldDue {
-		if m.handleDuePicker(msg.String()) {
+		if current == fieldStatus {
+			m.cycleStatus(1)
 			return m, nil
 		}
 	}
 
-	if m.focusIndex == fieldTitle || m.focusIndex == fieldDescription {
-		m.inputs[m.focusIndex], _ = m.inputs[m.focusIndex].Update(msg)
+	if current == fieldDue {
+		if m.handleDatePicker(&m.duePicker, msg.String()) {
+			return m, nil
+		}
+	}
+
+	if current == fieldPlanned {
+		if m.handleDatePicker(&m.plannedPicker, msg.String()) {
+			return m, nil
+		}
+	}
+
+	if input := m.inputFor(current); input != nil {
+		*input, _ = input.Update(msg)
 	}
 	return m, nil
 }
@@ -224,19 +263,29 @@ func (m *Model) startForm(kind formKind, task model.Task) {
 	m.mode = modeForm
 	m.formKind = kind
 	m.editTaskID = task.ID
-	m.inputs = make([]textinput.Model, 2)
 	m.focusIndex = 0
 
-	m.inputs[0] = newInput("Title", task.Title)
-	m.inputs[1] = newInput("Description", task.Description)
+	m.titleInput = newInput("Title", task.Title)
+	m.impactInput = newInput("Impact", task.Impact)
+	m.nextActionInput = newInput("Next Action", task.NextAction)
+	m.delegateInput = newInput("Delegate To", task.DelegateTo)
+	m.deleteReasonInput = newInput("Delete Reason", task.DeleteReason)
+	m.effortInput = newInput("Effort Estimate", task.EffortEstimate)
 	if kind == formAdd {
 		m.important = true
 		m.urgent = true
+		m.status = model.StatusPending
 	} else {
 		m.important = task.Important
 		m.urgent = task.Urgent
+		if task.Status == "" {
+			m.status = model.StatusPending
+		} else {
+			m.status = task.Status
+		}
 	}
 	m.duePicker = newDuePicker(task.DueAt)
+	m.plannedPicker = newDuePicker(task.PlannedDate)
 }
 
 func newInput(placeholder, value string) textinput.Model {
@@ -250,27 +299,27 @@ func newInput(placeholder, value string) textinput.Model {
 }
 
 func (m Model) focusCmd() tea.Cmd {
-	for i := range m.inputs {
-		if i == m.focusIndex {
-			m.inputs[i].Focus()
-			continue
-		}
-		m.inputs[i].Blur()
+	for _, input := range m.allInputs() {
+		input.Blur()
 	}
-	if m.focusIndex >= len(m.inputs) {
-		for i := range m.inputs {
-			m.inputs[i].Blur()
+	if field := m.currentField(); field != nil {
+		if input := m.inputFor(*field); input != nil {
+			input.Focus()
 		}
 	}
 	return nil
 }
 
 func (m Model) submitForm() tea.Model {
-	title := strings.TrimSpace(m.inputs[0].Value())
-	desc := strings.TrimSpace(m.inputs[1].Value())
+	title := strings.TrimSpace(m.titleInput.Value())
+	desc := ""
 	var due *time.Time
 	if m.duePicker.enabled {
 		due = &m.duePicker.t
+	}
+	var planned *time.Time
+	if m.plannedPicker.enabled {
+		planned = &m.plannedPicker.t
 	}
 
 	if title == "" {
@@ -280,15 +329,29 @@ func (m Model) submitForm() tea.Model {
 
 	switch m.formKind {
 	case formAdd:
-		m.tasks = append(m.tasks, model.NewTask(title, desc, m.important, m.urgent, due))
+		task := model.NewTask(title, desc, m.important, m.urgent, due)
+		task.Status = m.statusOrDefault()
+		task.Impact = strings.TrimSpace(m.impactInput.Value())
+		task.NextAction = strings.TrimSpace(m.nextActionInput.Value())
+		task.PlannedDate = planned
+		task.DelegateTo = strings.TrimSpace(m.delegateInput.Value())
+		task.DeleteReason = strings.TrimSpace(m.deleteReasonInput.Value())
+		task.EffortEstimate = strings.TrimSpace(m.effortInput.Value())
+		m.tasks = append(m.tasks, task)
 	case formEdit:
 		for i := range m.tasks {
 			if m.tasks[i].ID == m.editTaskID {
 				m.tasks[i].Title = title
-				m.tasks[i].Description = desc
 				m.tasks[i].Important = m.important
 				m.tasks[i].Urgent = m.urgent
 				m.tasks[i].DueAt = due
+				m.tasks[i].Status = m.statusOrDefault()
+				m.tasks[i].Impact = strings.TrimSpace(m.impactInput.Value())
+				m.tasks[i].NextAction = strings.TrimSpace(m.nextActionInput.Value())
+				m.tasks[i].PlannedDate = planned
+				m.tasks[i].DelegateTo = strings.TrimSpace(m.delegateInput.Value())
+				m.tasks[i].DeleteReason = strings.TrimSpace(m.deleteReasonInput.Value())
+				m.tasks[i].EffortEstimate = strings.TrimSpace(m.effortInput.Value())
 				break
 			}
 		}
@@ -497,13 +560,126 @@ func checkbox(checked bool) string {
 	return "[ ]"
 }
 
-func (m Model) formLine(field int, label, value string) string {
+func (m Model) formLine(field formField, label, value string) string {
 	cursor := " "
-	if m.focusIndex == field {
+	if current := m.currentField(); current != nil && *current == field {
 		cursor = ">"
 	}
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 	return fmt.Sprintf("%s %s: %s", cursor, labelStyle.Render(label), value)
+}
+
+func (m Model) formFields() []formField {
+	switch {
+	case m.important && m.urgent:
+		return []formField{fieldStatus, fieldTitle, fieldImportant, fieldUrgent, fieldDue, fieldImpact, fieldNextAction}
+	case m.important:
+		return []formField{fieldStatus, fieldTitle, fieldImportant, fieldUrgent, fieldPlanned, fieldEffort}
+	case m.urgent:
+		return []formField{fieldStatus, fieldTitle, fieldImportant, fieldUrgent, fieldDue, fieldDelegate}
+	default:
+		return []formField{fieldTitle, fieldImportant, fieldUrgent, fieldDeleteReason}
+	}
+}
+
+func (m Model) currentField() *formField {
+	fields := m.formFields()
+	if len(fields) == 0 {
+		return nil
+	}
+	if m.focusIndex >= len(fields) {
+		return &fields[0]
+	}
+	return &fields[m.focusIndex]
+}
+
+func (m Model) formFieldLine(field formField) string {
+	switch field {
+	case fieldStatus:
+		return m.formLine(fieldStatus, "Status", m.statusDisplay())
+	case fieldTitle:
+		return m.formLine(fieldTitle, "Title", m.titleInput.View())
+	case fieldImportant:
+		return m.formLine(fieldImportant, "Important", checkbox(m.important))
+	case fieldUrgent:
+		return m.formLine(fieldUrgent, "Urgent", checkbox(m.urgent))
+	case fieldDue:
+		return m.formLine(fieldDue, "Due/SLA", m.duePicker.String())
+	case fieldImpact:
+		return m.formLine(fieldImpact, "Impact", m.impactInput.View())
+	case fieldNextAction:
+		return m.formLine(fieldNextAction, "Next Action", m.nextActionInput.View())
+	case fieldPlanned:
+		return m.formLine(fieldPlanned, "Planned Date", m.plannedPicker.String())
+	case fieldEffort:
+		return m.formLine(fieldEffort, "Effort", m.effortInput.View())
+	case fieldDelegate:
+		return m.formLine(fieldDelegate, "Delegate To", m.delegateInput.View())
+	case fieldDeleteReason:
+		return m.formLine(fieldDeleteReason, "Delete Reason", m.deleteReasonInput.View())
+	default:
+		return ""
+	}
+}
+
+func (m Model) statusDisplay() string {
+	return "[" + m.statusOrDefault() + "]"
+}
+
+func (m Model) statusOrDefault() string {
+	if m.status == "" {
+		return model.StatusPending
+	}
+	return m.status
+}
+
+func (m *Model) cycleStatus(delta int) {
+	current := m.statusOrDefault()
+	index := 0
+	for i, opt := range statusOptions {
+		if opt == current {
+			index = i
+			break
+		}
+	}
+	index += delta
+	if index < 0 {
+		index = len(statusOptions) - 1
+	}
+	if index >= len(statusOptions) {
+		index = 0
+	}
+	m.status = statusOptions[index]
+}
+
+func (m Model) allInputs() []*textinput.Model {
+	return []*textinput.Model{
+		&m.titleInput,
+		&m.impactInput,
+		&m.nextActionInput,
+		&m.delegateInput,
+		&m.deleteReasonInput,
+		&m.effortInput,
+	}
+}
+
+func (m *Model) inputFor(field formField) *textinput.Model {
+	switch field {
+	case fieldTitle:
+		return &m.titleInput
+	case fieldImpact:
+		return &m.impactInput
+	case fieldNextAction:
+		return &m.nextActionInput
+	case fieldDelegate:
+		return &m.delegateInput
+	case fieldDeleteReason:
+		return &m.deleteReasonInput
+	case fieldEffort:
+		return &m.effortInput
+	default:
+		return nil
+	}
 }
 
 func newDuePicker(due *time.Time) duePicker {
@@ -542,34 +718,34 @@ func (p duePicker) String() string {
 	return fmt.Sprintf("%s-%s-%s %s:%s", segments[0], segments[1], segments[2], segments[3], segments[4])
 }
 
-func (m *Model) handleDuePicker(key string) bool {
+func (m *Model) handleDatePicker(p *duePicker, key string) bool {
 	switch key {
 	case "x":
-		m.duePicker.enabled = false
+		p.enabled = false
 		return true
 	case "t":
-		m.duePicker.enabled = true
-		m.duePicker.t = time.Now().Truncate(time.Minute)
+		p.enabled = true
+		p.t = time.Now().Truncate(time.Minute)
 		return true
 	case "left", "h":
-		m.duePicker.segment--
-		if m.duePicker.segment < 0 {
-			m.duePicker.segment = 4
+		p.segment--
+		if p.segment < 0 {
+			p.segment = 4
 		}
 		return true
 	case "right", "l":
-		m.duePicker.segment++
-		if m.duePicker.segment > 4 {
-			m.duePicker.segment = 0
+		p.segment++
+		if p.segment > 4 {
+			p.segment = 0
 		}
 		return true
 	case "k", "+":
-		m.duePicker.enabled = true
-		m.duePicker.adjust(1)
+		p.enabled = true
+		p.adjust(1)
 		return true
 	case "j", "-":
-		m.duePicker.enabled = true
-		m.duePicker.adjust(-1)
+		p.enabled = true
+		p.adjust(-1)
 		return true
 	default:
 		return false
@@ -589,25 +765,6 @@ func (p *duePicker) adjust(delta int) {
 	case 4:
 		p.t = p.t.Add(time.Duration(delta) * time.Minute)
 	}
-}
-
-func (m Model) viewForm() string {
-	var b strings.Builder
-	if m.formKind == formAdd {
-		b.WriteString("Add Task\n")
-	} else {
-		b.WriteString("Edit Task\n")
-	}
-	b.WriteString("----------------\n")
-	for i, input := range m.inputs {
-		cursor := " "
-		if i == m.focusIndex {
-			cursor = ">"
-		}
-		fmt.Fprintf(&b, "%s %s: %s\n", cursor, input.Placeholder, input.View())
-	}
-	b.WriteString("\n[enter] Next  [esc] Cancel\n")
-	return b.String()
 }
 
 func (m Model) viewOverlayForm() string {
@@ -640,25 +797,23 @@ func (m Model) viewModalBox() string {
 		boxH = 10
 	}
 
-	lines := []string{
-		m.formLine(fieldTitle, "Title", m.inputs[0].View()),
-		m.formLine(fieldDescription, "Description", m.inputs[1].View()),
-		m.formLine(fieldImportant, "Important", checkbox(m.important)),
-		m.formLine(fieldUrgent, "Urgent", checkbox(m.urgent)),
-		m.formLine(fieldDue, "Due", m.duePicker.String()),
-		"[enter] Next  [esc] Cancel",
+	fields := m.formFields()
+	lines := make([]string, 0, len(fields)+2)
+	for _, field := range fields {
+		lines = append(lines, m.formFieldLine(field))
 	}
+	lines = append(lines, "[enter] Next  [esc] Cancel")
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 	hintLine := hintStyle.Render("Hints: space=toggle checkbox  h/l=segment  j/k=change  t=now  x=clear due")
 	innerHeight := boxH - 2
 	if innerHeight > 0 {
-		if len(lines) < innerHeight-1 {
+		if len(lines) >= innerHeight {
+			lines = append(lines[:innerHeight-1], hintLine)
+		} else {
 			pad := innerHeight - 1 - len(lines)
 			for i := 0; i < pad; i++ {
 				lines = append(lines, "")
 			}
-			lines = append(lines, hintLine)
-		} else {
 			lines = append(lines, hintLine)
 		}
 	}
