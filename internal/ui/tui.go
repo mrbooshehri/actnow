@@ -385,16 +385,11 @@ func (m Model) viewList() string {
 		}
 	}
 
-	baseStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Foreground(lipgloss.Color("252")).
-		Padding(0, 1).
-		Width(boxW).
-		Height(boxH)
-	selectedStyle := baseStyle.Copy().
-		BorderForeground(lipgloss.Color("214")).
-		Foreground(lipgloss.Color("229"))
+	border := lipgloss.RoundedBorder()
+	baseBorderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	baseTextStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	selectedBorderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	selectedTextStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229"))
 
 	boxes := make([]string, 4)
 	for q := 0; q < 4; q++ {
@@ -422,11 +417,13 @@ func (m Model) viewList() string {
 			}
 		}
 		content := strings.Join(lines, "\n")
-		style := baseStyle
+		borderStyle := baseBorderStyle
+		textStyle := baseTextStyle
 		if q == m.quadrant {
-			style = selectedStyle
+			borderStyle = selectedBorderStyle
+			textStyle = selectedTextStyle
 		}
-		boxes[q] = renderPanel(style, content, title)
+		boxes[q] = renderPanelBox(border, borderStyle, textStyle, boxW, boxH, title, content)
 	}
 
 	topRow := lipgloss.JoinHorizontal(lipgloss.Top, boxes[0], strings.Repeat(" ", boxGap), boxes[1])
@@ -439,37 +436,68 @@ func (m Model) viewList() string {
 	return lipgloss.JoinVertical(lipgloss.Left, grid, footerBlock)
 }
 
-func renderPanel(style lipgloss.Style, content, title string) string {
-	rendered := style.Render(content)
-	lines := strings.Split(rendered, "\n")
-	if len(lines) == 0 {
-		return rendered
+func renderPanelBox(border lipgloss.Border, borderStyle, textStyle lipgloss.Style, width, height int, title, content string) string {
+	if width < 2 || height < 2 {
+		return content
 	}
-	top := []rune(lines[0])
-	if len(top) < 3 {
-		return rendered
-	}
-	innerWidth := len(top) - 2
-	if innerWidth < 2 {
-		return rendered
-	}
-	left := top[0]
-	right := top[len(top)-1]
-	fill := top[1]
+	innerWidth := width - 2
+	innerHeight := height - 2
+
 	titleRunes := []rune(title)
 	if len(titleRunes) > innerWidth-2 {
 		titleRunes = titleRunes[:innerWidth-2]
 	}
 
-	inner := make([]rune, 0, innerWidth)
-	inner = append(inner, ' ')
-	inner = append(inner, titleRunes...)
-	inner = append(inner, ' ')
-	for len(inner) < innerWidth {
-		inner = append(inner, fill)
+	var b strings.Builder
+	b.WriteString(renderTopBorder(border, borderStyle, innerWidth, titleRunes))
+	b.WriteString("\n")
+
+	contentLines := strings.Split(content, "\n")
+	for i := 0; i < innerHeight; i++ {
+		line := ""
+		if i < len(contentLines) {
+			line = contentLines[i]
+		}
+		lineRunes := []rune(line)
+		if len(lineRunes) > innerWidth {
+			lineRunes = lineRunes[:innerWidth]
+		}
+		for len(lineRunes) < innerWidth {
+			lineRunes = append(lineRunes, ' ')
+		}
+		b.WriteString(borderStyle.Render(border.Left))
+		b.WriteString(textStyle.Render(string(lineRunes)))
+		b.WriteString(borderStyle.Render(border.Right))
+		if i < innerHeight-1 {
+			b.WriteString("\n")
+		}
 	}
-	lines[0] = string(append(append([]rune{left}, inner...), right))
-	return strings.Join(lines, "\n")
+
+	b.WriteString("\n")
+	b.WriteString(borderStyle.Render(border.BottomLeft))
+	b.WriteString(borderStyle.Render(strings.Repeat(border.Bottom, innerWidth)))
+	b.WriteString(borderStyle.Render(border.BottomRight))
+
+	return b.String()
+}
+
+func renderTopBorder(border lipgloss.Border, borderStyle lipgloss.Style, innerWidth int, title []rune) string {
+	if innerWidth < 1 {
+		return borderStyle.Render(border.TopLeft + border.TopRight)
+	}
+	inner := make([]rune, 0, innerWidth)
+	if len(title) > 0 && innerWidth >= 2 {
+		inner = append(inner, ' ')
+		inner = append(inner, title...)
+		inner = append(inner, ' ')
+	}
+	for len(inner) < innerWidth {
+		inner = append(inner, []rune(border.Top)...)
+		if len(inner) > innerWidth {
+			inner = inner[:innerWidth]
+		}
+	}
+	return borderStyle.Render(border.TopLeft) + borderStyle.Render(string(inner)) + borderStyle.Render(border.TopRight)
 }
 
 func (m Model) viewForm() string {
