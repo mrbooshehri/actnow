@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/mrbooshehri/actNow/internal/engine"
 	"github.com/mrbooshehri/actNow/internal/model"
@@ -40,6 +41,8 @@ type Model struct {
 	statusIsErr  bool
 	editTaskID   string
 	lastSaveTime time.Time
+	width        int
+	height       int
 }
 
 func New(store *store.Store, tasks []model.Task) Model {
@@ -66,6 +69,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.applyUrgency()
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyMsg:
 		switch m.mode {
 		case modeList:
@@ -312,13 +319,17 @@ func (m *Model) setStatusErr(msg string) {
 }
 
 func (m Model) visibleIndices() []int {
+	return m.indicesByQuadrant(m.quadrant)
+}
+
+func (m Model) indicesByQuadrant(q int) []int {
 	indices := make([]int, 0, len(m.tasks))
 	for i, t := range m.tasks {
-		if engine.QuadrantIndex(t) == m.quadrant {
+		if engine.QuadrantIndex(t) == q {
 			indices = append(indices, i)
 		}
 	}
-	if m.selected >= len(indices) {
+	if q == m.quadrant && m.selected >= len(indices) {
 		m.selected = 0
 	}
 	return indices
@@ -331,43 +342,81 @@ func (m Model) viewList() string {
 		engine.QuadrantNotImportantImmediate,
 		engine.QuadrantNotImportantNot,
 	}
-	visible := m.visibleIndices()
-
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n", strings.ToUpper(quadrants[m.quadrant]))
-	b.WriteString(strings.Repeat("-", len(quadrants[m.quadrant])) + "\n")
-
-	if len(visible) == 0 {
-		b.WriteString("(no tasks)\n")
-	} else {
-		for i, idx := range visible {
-			task := m.tasks[idx]
-			cursor := " "
-			if i == m.selected {
-				cursor = ">"
-			}
-			status := "[ ]"
-			if task.IsDone() {
-				status = "[x]"
-			}
-			due := ""
-			if task.DueAt != nil {
-				due = " (due " + task.DueAt.Format("2006-01-02 15:04") + ")"
-			}
-			fmt.Fprintf(&b, "%s %s %s%s\n", cursor, status, task.Title, due)
-		}
-	}
-
-	b.WriteString("\n[a] Add  [e] Edit  [d] Done  [x] Delete  [tab] Next Quadrant  [q] Quit\n")
+	footer := "[a] Add  [e] Edit  [d] Done  [x] Delete  [tab] Next Quadrant  [q] Quit"
+	status := ""
 	if m.statusMsg != "" {
 		prefix := "OK"
 		if m.statusIsErr {
 			prefix = "ERR"
 		}
-		fmt.Fprintf(&b, "%s: %s\n", prefix, m.statusMsg)
+		status = fmt.Sprintf("%s: %s", prefix, m.statusMsg)
 	}
 
-	return b.String()
+	screenW := m.width
+	screenH := m.height
+	if screenW < 80 {
+		screenW = 80
+	}
+	if screenH < 24 {
+		screenH = 24
+	}
+	boxGap := 1
+	boxW := (screenW - boxGap) / 2
+	footerLines := 2
+	boxH := (screenH - footerLines - 1) / 2
+
+	baseStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color("252")).
+		Width(boxW).
+		Height(boxH)
+	selectedStyle := baseStyle.Copy().
+		BorderForeground(lipgloss.Color("214")).
+		Foreground(lipgloss.Color("229"))
+
+	boxes := make([]string, 4)
+	for q := 0; q < 4; q++ {
+		indices := m.indicesByQuadrant(q)
+		lines := make([]string, 0, len(indices)+1)
+		title := strings.ToUpper(quadrants[q])
+		lines = append(lines, title)
+		if len(indices) == 0 {
+			lines = append(lines, "(no tasks)")
+		} else {
+			for i, idx := range indices {
+				task := m.tasks[idx]
+				cursor := " "
+				if q == m.quadrant && i == m.selected {
+					cursor = ">"
+				}
+				statusMark := "[ ]"
+				if task.IsDone() {
+					statusMark = "[x]"
+				}
+				due := ""
+				if task.DueAt != nil {
+					due = " (due " + task.DueAt.Format("2006-01-02 15:04") + ")"
+				}
+				lines = append(lines, fmt.Sprintf("%s %s %s%s", cursor, statusMark, task.Title, due))
+			}
+		}
+		content := strings.Join(lines, "\n")
+		style := baseStyle
+		if q == m.quadrant {
+			style = selectedStyle
+		}
+		boxes[q] = style.Render(content)
+	}
+
+	topRow := lipgloss.JoinHorizontal(lipgloss.Top, boxes[0], strings.Repeat(" ", boxGap), boxes[1])
+	bottomRow := lipgloss.JoinHorizontal(lipgloss.Top, boxes[2], strings.Repeat(" ", boxGap), boxes[3])
+	grid := lipgloss.JoinVertical(lipgloss.Left, topRow, bottomRow)
+	footerBlock := footer
+	if status != "" {
+		footerBlock = footer + "\n" + status
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, grid, footerBlock)
 }
 
 func (m Model) viewForm() string {
