@@ -354,21 +354,27 @@ func (m Model) viewList() string {
 
 	screenW := m.width
 	screenH := m.height
-	if screenW < 80 {
+	if screenW == 0 || screenH == 0 {
 		screenW = 80
-	}
-	if screenH < 24 {
 		screenH = 24
 	}
 	boxGap := 1
 	boxW := (screenW - boxGap) / 2
-	footerLines := 2
-	boxH := (screenH - footerLines - 1) / 2
+	footerLines := 1
+	if status != "" {
+		footerLines = 2
+	}
+	available := screenH - footerLines
+	boxH := available / 2
+	if boxH < 3 {
+		boxH = 3
+	}
 
 	baseStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("240")).
 		Foreground(lipgloss.Color("252")).
+		Padding(0, 1).
 		Width(boxW).
 		Height(boxH)
 	selectedStyle := baseStyle.Copy().
