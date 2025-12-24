@@ -47,6 +47,24 @@ type Model struct {
 	lastSaveTime time.Time
 	width        int
 	height       int
+	important    bool
+	urgent       bool
+	duePicker    duePicker
+}
+
+const (
+	fieldTitle = iota
+	fieldDescription
+	fieldImportant
+	fieldUrgent
+	fieldDue
+	fieldCount
+)
+
+type duePicker struct {
+	enabled bool
+	t       time.Time
+	segment int
 }
 
 func New(store *store.Store, tasks []model.Task) Model {
@@ -164,25 +182,40 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "up", "shift+tab":
 		m.focusIndex--
 		if m.focusIndex < 0 {
-			m.focusIndex = len(m.inputs) - 1
+			m.focusIndex = fieldCount - 1
 		}
 		return m, m.focusCmd()
 	case "down", "tab":
 		m.focusIndex++
-		if m.focusIndex >= len(m.inputs) {
+		if m.focusIndex >= fieldCount {
 			m.focusIndex = 0
 		}
 		return m, m.focusCmd()
 	case "enter":
-		if m.focusIndex >= len(m.inputs)-1 {
+		if m.focusIndex >= fieldCount-1 {
 			return m.submitForm(), nil
 		}
 		m.focusIndex++
 		return m, m.focusCmd()
+	case " ":
+		if m.focusIndex == fieldImportant {
+			m.important = !m.important
+			return m, nil
+		}
+		if m.focusIndex == fieldUrgent {
+			m.urgent = !m.urgent
+			return m, nil
+		}
 	}
 
-	for i := range m.inputs {
-		m.inputs[i], _ = m.inputs[i].Update(msg)
+	if m.focusIndex == fieldDue {
+		if m.handleDuePicker(msg.String()) {
+			return m, nil
+		}
+	}
+
+	if m.focusIndex == fieldTitle || m.focusIndex == fieldDescription {
+		m.inputs[m.focusIndex], _ = m.inputs[m.focusIndex].Update(msg)
 	}
 	return m, nil
 }
@@ -191,31 +224,19 @@ func (m *Model) startForm(kind formKind, task model.Task) {
 	m.mode = modeForm
 	m.formKind = kind
 	m.editTaskID = task.ID
-	m.inputs = make([]textinput.Model, 5)
+	m.inputs = make([]textinput.Model, 2)
 	m.focusIndex = 0
 
 	m.inputs[0] = newInput("Title", task.Title)
 	m.inputs[1] = newInput("Description", task.Description)
-	m.inputs[2] = newInput("Important (y/n)", boolToYN(task.Important, kind == formAdd))
-	m.inputs[3] = newInput("Urgent (y/n)", boolToYN(task.Urgent, kind == formAdd))
-	m.inputs[4] = newInput("Due (YYYY-MM-DD HH:MM or empty)", formatDue(task.DueAt))
-}
-
-func boolToYN(v bool, defaultYes bool) string {
-	if v {
-		return "y"
+	if kind == formAdd {
+		m.important = true
+		m.urgent = true
+	} else {
+		m.important = task.Important
+		m.urgent = task.Urgent
 	}
-	if defaultYes {
-		return "y"
-	}
-	return "n"
-}
-
-func formatDue(due *time.Time) string {
-	if due == nil {
-		return ""
-	}
-	return due.Format("2006-01-02 15:04")
+	m.duePicker = newDuePicker(task.DueAt)
 }
 
 func newInput(placeholder, value string) textinput.Model {
@@ -235,30 +256,20 @@ func (m Model) focusCmd() tea.Cmd {
 		}
 		m.inputs[i].Blur()
 	}
+	if m.focusIndex >= len(m.inputs) {
+		for i := range m.inputs {
+			m.inputs[i].Blur()
+		}
+	}
 	return nil
 }
 
 func (m Model) submitForm() tea.Model {
 	title := strings.TrimSpace(m.inputs[0].Value())
 	desc := strings.TrimSpace(m.inputs[1].Value())
-	important, err := parseBool(m.inputs[2].Value())
-	if err != nil {
-		m.setStatusErr("Important must be y or n")
-		return m
-	}
-	urgent, err := parseBool(m.inputs[3].Value())
-	if err != nil {
-		m.setStatusErr("Urgent must be y or n")
-		return m
-	}
 	var due *time.Time
-	if strings.TrimSpace(m.inputs[4].Value()) != "" {
-		parsed, err := parseDue(m.inputs[4].Value())
-		if err != nil {
-			m.setStatusErr("Due must be YYYY-MM-DD HH:MM")
-			return m
-		}
-		due = &parsed
+	if m.duePicker.enabled {
+		due = &m.duePicker.t
 	}
 
 	if title == "" {
@@ -268,14 +279,14 @@ func (m Model) submitForm() tea.Model {
 
 	switch m.formKind {
 	case formAdd:
-		m.tasks = append(m.tasks, model.NewTask(title, desc, important, urgent, due))
+		m.tasks = append(m.tasks, model.NewTask(title, desc, m.important, m.urgent, due))
 	case formEdit:
 		for i := range m.tasks {
 			if m.tasks[i].ID == m.editTaskID {
 				m.tasks[i].Title = title
 				m.tasks[i].Description = desc
-				m.tasks[i].Important = important
-				m.tasks[i].Urgent = urgent
+				m.tasks[i].Important = m.important
+				m.tasks[i].Urgent = m.urgent
 				m.tasks[i].DueAt = due
 				break
 			}
@@ -285,32 +296,6 @@ func (m Model) submitForm() tea.Model {
 	m.saveTasks()
 	m.mode = modeList
 	return m
-}
-
-func parseBool(v string) (bool, error) {
-	s := strings.TrimSpace(strings.ToLower(v))
-	switch s {
-	case "y", "yes", "true", "1":
-		return true, nil
-	case "n", "no", "false", "0":
-		return false, nil
-	default:
-		return false, fmt.Errorf("invalid")
-	}
-}
-
-func parseDue(v string) (time.Time, error) {
-	layouts := []string{
-		"2006-01-02 15:04",
-		"2006-01-02T15:04",
-		"2006-01-02",
-	}
-	for _, layout := range layouts {
-		if t, err := time.Parse(layout, strings.TrimSpace(v)); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("invalid")
 }
 
 func (m *Model) saveTasks() {
@@ -504,6 +489,106 @@ func fitLine(line string, width int) string {
 	return line + strings.Repeat(" ", width-visible)
 }
 
+func checkbox(checked bool) string {
+	if checked {
+		return "[x]"
+	}
+	return "[ ]"
+}
+
+func (m Model) formLine(field int, label, value string) string {
+	cursor := " "
+	if m.focusIndex == field {
+		cursor = ">"
+	}
+	return fmt.Sprintf("%s %s: %s", cursor, label, value)
+}
+
+func newDuePicker(due *time.Time) duePicker {
+	if due == nil {
+		return duePicker{
+			enabled: false,
+			t:       time.Now().Truncate(time.Minute),
+			segment: 0,
+		}
+	}
+	return duePicker{
+		enabled: true,
+		t:       due.Truncate(time.Minute),
+		segment: 0,
+	}
+}
+
+func (p duePicker) String() string {
+	if !p.enabled {
+		return "(empty)"
+	}
+	hi := lipgloss.NewStyle().Underline(true).Bold(true)
+	year, month, day := p.t.Date()
+	hour, min, _ := p.t.Clock()
+
+	segments := []string{
+		fmt.Sprintf("%04d", year),
+		fmt.Sprintf("%02d", int(month)),
+		fmt.Sprintf("%02d", day),
+		fmt.Sprintf("%02d", hour),
+		fmt.Sprintf("%02d", min),
+	}
+	if p.segment >= 0 && p.segment < len(segments) {
+		segments[p.segment] = hi.Render(segments[p.segment])
+	}
+	return fmt.Sprintf("%s-%s-%s %s:%s", segments[0], segments[1], segments[2], segments[3], segments[4])
+}
+
+func (m *Model) handleDuePicker(key string) bool {
+	switch key {
+	case "x":
+		m.duePicker.enabled = false
+		return true
+	case "t":
+		m.duePicker.enabled = true
+		m.duePicker.t = time.Now().Truncate(time.Minute)
+		return true
+	case "left", "h":
+		m.duePicker.segment--
+		if m.duePicker.segment < 0 {
+			m.duePicker.segment = 4
+		}
+		return true
+	case "right", "l":
+		m.duePicker.segment++
+		if m.duePicker.segment > 4 {
+			m.duePicker.segment = 0
+		}
+		return true
+	case "k", "+":
+		m.duePicker.enabled = true
+		m.duePicker.adjust(1)
+		return true
+	case "j", "-":
+		m.duePicker.enabled = true
+		m.duePicker.adjust(-1)
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *duePicker) adjust(delta int) {
+	switch p.segment {
+	case 0:
+		p.t = p.t.AddDate(delta, 0, 0)
+	case 1:
+		p.t = p.t.AddDate(0, delta, 0)
+	case 2:
+		p.t = p.t.AddDate(0, 0, delta)
+	case 3:
+		p.t = p.t.Add(time.Duration(delta) * time.Hour)
+	case 4:
+		p.t = p.t.Add(time.Duration(delta) * time.Minute)
+	}
+}
+
 func (m Model) viewForm() string {
 	var b strings.Builder
 	if m.formKind == formAdd {
@@ -536,13 +621,15 @@ func (m Model) viewModalBox() string {
 	}
 
 	var b strings.Builder
-	for i, input := range m.inputs {
-		cursor := " "
-		if i == m.focusIndex {
-			cursor = ">"
-		}
-		fmt.Fprintf(&b, "%s %s: %s\n", cursor, input.Placeholder, input.View())
-	}
+	b.WriteString(m.formLine(fieldTitle, "Title", m.inputs[0].View()))
+	b.WriteString("\n")
+	b.WriteString(m.formLine(fieldDescription, "Description", m.inputs[1].View()))
+	b.WriteString("\n")
+	b.WriteString(m.formLine(fieldImportant, "Important", checkbox(m.important)))
+	b.WriteString("\n")
+	b.WriteString(m.formLine(fieldUrgent, "Urgent", checkbox(m.urgent)))
+	b.WriteString("\n")
+	b.WriteString(m.formLine(fieldDue, "Due", m.duePicker.String()))
 	b.WriteString("\n[enter] Next  [esc] Cancel\n")
 
 	width := m.width
