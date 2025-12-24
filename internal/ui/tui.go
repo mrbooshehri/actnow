@@ -804,7 +804,7 @@ func (m Model) viewModalBox() string {
 	}
 	lines = append(lines, "[enter] Next  [esc] Cancel")
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	hintLine := hintStyle.Render("Hints: space=toggle checkbox  h/l=segment  j/k=change  t=now  x=clear due")
+	hintLine := hintStyle.Render("Hint: space=toggle  arrows/h-l=move  j/k=change  t=now  x=clear due")
 	innerHeight := boxH - 2
 	if innerHeight > 0 {
 		if len(lines) >= innerHeight {
