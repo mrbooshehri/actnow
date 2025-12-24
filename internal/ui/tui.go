@@ -160,9 +160,19 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "ctrl+c":
 		m.mode = modeList
-		m.statusMsg = "Canceled"
-		m.statusIsErr = false
 		return m, nil
+	case "up", "shift+tab":
+		m.focusIndex--
+		if m.focusIndex < 0 {
+			m.focusIndex = len(m.inputs) - 1
+		}
+		return m, m.focusCmd()
+	case "down", "tab":
+		m.focusIndex++
+		if m.focusIndex >= len(m.inputs) {
+			m.focusIndex = 0
+		}
+		return m, m.focusCmd()
 	case "enter":
 		if m.focusIndex >= len(m.inputs)-1 {
 			return m.submitForm(), nil
@@ -210,6 +220,7 @@ func formatDue(due *time.Time) string {
 
 func newInput(placeholder, value string) textinput.Model {
 	ti := textinput.New()
+	ti.Prompt = ""
 	ti.Placeholder = placeholder
 	ti.SetValue(value)
 	ti.CharLimit = 200
@@ -273,8 +284,6 @@ func (m Model) submitForm() tea.Model {
 
 	m.saveTasks()
 	m.mode = modeList
-	m.statusMsg = "Saved"
-	m.statusIsErr = false
 	return m
 }
 
@@ -347,14 +356,6 @@ func (m Model) viewList() string {
 		engine.QuadrantNotImportantNot,
 	}
 	footer := "[a] Add  [e] Edit  [d] Done  [x] Delete  [tab] Next Quadrant  [q] Quit"
-	status := ""
-	if m.statusMsg != "" {
-		prefix := "OK"
-		if m.statusIsErr {
-			prefix = "ERR"
-		}
-		status = fmt.Sprintf("%s: %s", prefix, m.statusMsg)
-	}
 
 	screenW := m.width
 	screenH := m.height
@@ -374,9 +375,6 @@ func (m Model) viewList() string {
 		}
 	}
 	footerLines := 1
-	if status != "" {
-		footerLines = 2
-	}
 	available := screenH - footerLines
 	boxH := available / 2
 	if boxH < 5 {
@@ -433,11 +431,7 @@ func (m Model) viewList() string {
 	topRow := lipgloss.JoinHorizontal(lipgloss.Top, boxes[0], strings.Repeat(" ", boxGap), boxes[1])
 	bottomRow := lipgloss.JoinHorizontal(lipgloss.Top, boxes[2], strings.Repeat(" ", boxGap), boxes[3])
 	grid := lipgloss.JoinVertical(lipgloss.Left, topRow, bottomRow)
-	footerBlock := footer
-	if status != "" {
-		footerBlock = footer + "\n" + status
-	}
-	return lipgloss.JoinVertical(lipgloss.Left, grid, footerBlock)
+	return lipgloss.JoinVertical(lipgloss.Left, grid, footer)
 }
 
 func renderPanelBox(border lipgloss.Border, borderStyle, textStyle lipgloss.Style, width, height int, title, content string) string {
@@ -526,13 +520,6 @@ func (m Model) viewForm() string {
 		fmt.Fprintf(&b, "%s %s: %s\n", cursor, input.Placeholder, input.View())
 	}
 	b.WriteString("\n[enter] Next  [esc] Cancel\n")
-	if m.statusMsg != "" {
-		prefix := "OK"
-		if m.statusIsErr {
-			prefix = "ERR"
-		}
-		fmt.Fprintf(&b, "%s: %s\n", prefix, m.statusMsg)
-	}
 	return b.String()
 }
 
@@ -557,13 +544,6 @@ func (m Model) viewModalBox() string {
 		fmt.Fprintf(&b, "%s %s: %s\n", cursor, input.Placeholder, input.View())
 	}
 	b.WriteString("\n[enter] Next  [esc] Cancel\n")
-	if m.statusMsg != "" {
-		prefix := "OK"
-		if m.statusIsErr {
-			prefix = "ERR"
-		}
-		fmt.Fprintf(&b, "%s: %s\n", prefix, m.statusMsg)
-	}
 
 	width := m.width
 	height := m.height
