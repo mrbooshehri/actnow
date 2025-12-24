@@ -502,7 +502,8 @@ func (m Model) formLine(field int, label, value string) string {
 	if m.focusIndex == field {
 		cursor = ">"
 	}
-	return fmt.Sprintf("%s %s: %s", cursor, label, value)
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	return fmt.Sprintf("%s %s: %s", cursor, labelStyle.Render(label), value)
 }
 
 func newDuePicker(due *time.Time) duePicker {
