@@ -90,7 +90,7 @@ func (m Model) View() string {
 	case modeList:
 		return m.viewList()
 	case modeForm:
-		return m.viewForm()
+		return m.viewOverlayForm()
 	default:
 		return ""
 	}
@@ -524,4 +524,169 @@ func (m Model) viewForm() string {
 		fmt.Fprintf(&b, "%s: %s\n", prefix, m.statusMsg)
 	}
 	return b.String()
+}
+
+func (m Model) viewOverlayForm() string {
+	base := m.viewList()
+	modal := m.viewModalBox()
+	return overlayCenter(base, modal, m.width, m.height)
+}
+
+func (m Model) viewModalBox() string {
+	title := "Add Task"
+	if m.formKind == formEdit {
+		title = "Edit Task"
+	}
+
+	var b strings.Builder
+	for i, input := range m.inputs {
+		cursor := " "
+		if i == m.focusIndex {
+			cursor = ">"
+		}
+		fmt.Fprintf(&b, "%s %s: %s\n", cursor, input.Placeholder, input.View())
+	}
+	b.WriteString("\n[enter] Next  [esc] Cancel\n")
+	if m.statusMsg != "" {
+		prefix := "OK"
+		if m.statusIsErr {
+			prefix = "ERR"
+		}
+		fmt.Fprintf(&b, "%s: %s\n", prefix, m.statusMsg)
+	}
+
+	width := m.width
+	height := m.height
+	if width == 0 || height == 0 {
+		width = 80
+		height = 24
+	}
+	boxW := width * 2 / 3
+	if boxW < 50 {
+		boxW = 50
+	}
+	if boxW > width-4 {
+		boxW = width - 4
+	}
+	boxH := height / 2
+	if boxH < 10 {
+		boxH = 10
+	}
+
+	border := lipgloss.RoundedBorder()
+	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	textStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229"))
+	content := strings.TrimRight(b.String(), "\n")
+	return renderPanelBox(border, borderStyle, textStyle, boxW, boxH, title, content)
+}
+
+func overlayCenter(base, modal string, width, height int) string {
+	if width == 0 || height == 0 {
+		return base
+	}
+	baseLines := padToSize(base, width, height)
+	modalLines := strings.Split(modal, "\n")
+	modalW := maxLineWidth(modalLines)
+	modalH := len(modalLines)
+	if modalW == 0 || modalH == 0 {
+		return base
+	}
+
+	startX := (width - modalW) / 2
+	if startX < 0 {
+		startX = 0
+	}
+	startY := (height - modalH) / 2
+	if startY < 0 {
+		startY = 0
+	}
+
+	for i := 0; i < modalH && startY+i < len(baseLines); i++ {
+		left, right := splitByWidth(baseLines[startY+i], startX, modalW)
+		baseLines[startY+i] = left + modalLines[i] + right
+	}
+	return strings.Join(baseLines, "\n")
+}
+
+func padToSize(s string, width, height int) []string {
+	lines := strings.Split(s, "\n")
+	for i := range lines {
+		lines[i] = padLine(lines[i], width)
+	}
+	for len(lines) < height {
+		lines = append(lines, strings.Repeat(" ", width))
+	}
+	return lines
+}
+
+func padLine(s string, width int) string {
+	if width <= 0 {
+		return s
+	}
+	visible := lipgloss.Width(s)
+	if visible >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-visible)
+}
+
+func maxLineWidth(lines []string) int {
+	max := 0
+	for _, line := range lines {
+		if w := lipgloss.Width(line); w > max {
+			max = w
+		}
+	}
+	return max
+}
+
+func splitByWidth(s string, start, width int) (string, string) {
+	if start < 0 {
+		start = 0
+	}
+	if width < 0 {
+		width = 0
+	}
+	var left, right strings.Builder
+	visible := 0
+	for i := 0; i < len(s); {
+		r := s[i]
+		if r == '\x1b' {
+			seq, n := readANSI(s[i:])
+			if visible < start {
+				left.WriteString(seq)
+			} else if visible >= start+width {
+				right.WriteString(seq)
+			}
+			i += n
+			continue
+		}
+		if visible < start {
+			left.WriteByte(r)
+		} else if visible >= start+width {
+			right.WriteByte(r)
+		}
+		visible++
+		i++
+	}
+	return left.String(), right.String()
+}
+
+func readANSI(s string) (string, int) {
+	if len(s) == 0 || s[0] != '\x1b' {
+		return "", 0
+	}
+	i := 1
+	if i < len(s) && s[i] == '[' {
+		i++
+		for i < len(s) {
+			c := s[i]
+			i++
+			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+				break
+			}
+		}
+		return s[:i], i
+	}
+	return s[:1], 1
 }
