@@ -426,7 +426,7 @@ func (m Model) viewList() string {
 		if q == m.quadrant {
 			style = selectedStyle
 		}
-		boxes[q] = style.Copy().Title(title).Render(content)
+		boxes[q] = renderPanel(style, content, title)
 	}
 
 	topRow := lipgloss.JoinHorizontal(lipgloss.Top, boxes[0], strings.Repeat(" ", boxGap), boxes[1])
@@ -437,6 +437,39 @@ func (m Model) viewList() string {
 		footerBlock = footer + "\n" + status
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, grid, footerBlock)
+}
+
+func renderPanel(style lipgloss.Style, content, title string) string {
+	rendered := style.Render(content)
+	lines := strings.Split(rendered, "\n")
+	if len(lines) == 0 {
+		return rendered
+	}
+	top := []rune(lines[0])
+	if len(top) < 3 {
+		return rendered
+	}
+	innerWidth := len(top) - 2
+	if innerWidth < 2 {
+		return rendered
+	}
+	left := top[0]
+	right := top[len(top)-1]
+	fill := top[1]
+	titleRunes := []rune(title)
+	if len(titleRunes) > innerWidth-2 {
+		titleRunes = titleRunes[:innerWidth-2]
+	}
+
+	inner := make([]rune, 0, innerWidth)
+	inner = append(inner, ' ')
+	inner = append(inner, titleRunes...)
+	inner = append(inner, ' ')
+	for len(inner) < innerWidth {
+		inner = append(inner, fill)
+	}
+	lines[0] = string(append(append([]rune{left}, inner...), right))
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) viewForm() string {
