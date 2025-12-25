@@ -226,11 +226,6 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc", "ctrl+c":
 		m.mode = modeList
 		return m, nil
-	case "h":
-		m.prevMode = m.mode
-		m.mode = modeHelp
-		m.helpOffset = 0
-		return m, nil
 	case "up", "shift+tab":
 		m.focusIndex--
 		if m.focusIndex < 0 {
