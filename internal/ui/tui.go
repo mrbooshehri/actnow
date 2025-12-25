@@ -506,8 +506,9 @@ func (m Model) viewList() string {
 	}
 
 	border := lipgloss.RoundedBorder()
-	selectedBorderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-	selectedTextStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229"))
+	selectedBorder := lipgloss.DoubleBorder()
+	selectedBorderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	selectedTextStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 
 	boxes := make([]string, 4)
 	for q := 0; q < 4; q++ {
@@ -541,9 +542,11 @@ func (m Model) viewList() string {
 		borderColor, textColor := quadrantColors(q)
 		borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 		textStyle := lipgloss.NewStyle().Foreground(textColor)
+		boxBorder := border
 		if q == m.quadrant {
 			borderStyle = selectedBorderStyle
 			textStyle = selectedTextStyle
+			boxBorder = selectedBorder
 		}
 		maxLines := boxH - 2
 		if maxLines < 1 {
@@ -562,7 +565,7 @@ func (m Model) viewList() string {
 			visibleLines = lines[start:end]
 		}
 		content = strings.Join(visibleLines, "\n")
-		boxes[q] = renderPanelBox(border, borderStyle, textStyle, boxW, boxH, title, content)
+		boxes[q] = renderPanelBox(boxBorder, borderStyle, textStyle, boxW, boxH, title, content)
 	}
 
 	topRow := lipgloss.JoinHorizontal(lipgloss.Top, boxes[0], strings.Repeat(" ", boxGap), boxes[1])
