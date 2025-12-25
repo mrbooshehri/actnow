@@ -579,7 +579,7 @@ func quadrantColors(q int) (lipgloss.Color, lipgloss.Color) {
 	case 0:
 		return lipgloss.Color("196"), lipgloss.Color("255")
 	case 1:
-		return lipgloss.Color("160"), lipgloss.Color("255")
+		return lipgloss.Color("34"), lipgloss.Color("255")
 	case 2:
 		return lipgloss.Color("220"), lipgloss.Color("0")
 	default:
