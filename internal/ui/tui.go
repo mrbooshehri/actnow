@@ -176,6 +176,9 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "tab":
 		m.quadrant = (m.quadrant + 1) % 4
 		m.selected = 0
+	case "shift+tab":
+		m.quadrant = (m.quadrant + 3) % 4
+		m.selected = 0
 	case "a":
 		m.startForm(formAdd, model.Task{})
 		return m, m.focusCmd()
@@ -447,7 +450,7 @@ func (m Model) viewList() string {
 		engine.QuadrantNotImportantImmediate,
 		engine.QuadrantNotImportantNot,
 	}
-	footer := "[a] Add  [e] Edit  [d] Done  [x] Delete  [tab] Next Quadrant  [h] Help  [q] Quit"
+	footer := "[↑/↓ or j/k] Move  [a] Add  [e] Edit  [d] Done  [x] Delete  [tab] Next Quadrant  [shift+tab] Prev  [h] Help  [q] Quit"
 
 	screenW := m.width
 	screenH := m.height
@@ -520,6 +523,23 @@ func (m Model) viewList() string {
 			borderStyle = selectedBorderStyle
 			textStyle = selectedTextStyle
 		}
+		maxLines := boxH - 2
+		if maxLines < 1 {
+			maxLines = 1
+		}
+		start := 0
+		if len(lines) > maxLines && q == m.quadrant {
+			start = clamp(m.selected-maxLines/2, 0, max(0, len(lines)-maxLines))
+		}
+		visibleLines := lines
+		if len(lines) > maxLines {
+			end := start + maxLines
+			if end > len(lines) {
+				end = len(lines)
+			}
+			visibleLines = lines[start:end]
+		}
+		content = strings.Join(visibleLines, "\n")
 		boxes[q] = renderPanelBox(border, borderStyle, textStyle, boxW, boxH, title, content)
 	}
 
@@ -860,7 +880,7 @@ func (m Model) viewModalBox() string {
 	}
 	lines = append(lines, "[enter] Next  [esc] Cancel")
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	hintText := "[↑/↓]: move fields  [space]: toggle checkbox  [h/l]: date segment  [j/k]: change date  [t]: now  [x]: clear date"
+	hintText := "[↑/↓]: move fields  [space]: toggle checkbox  [h/l]: date segment  [j/k]: change date  [t]: current time  [x]: clear date"
 	hintLines := []string{hintText}
 	innerHeight := boxH - 2
 	if innerHeight > 0 {
