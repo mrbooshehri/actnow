@@ -240,6 +240,10 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "esc", "ctrl+c":
+		if m.formEditing {
+			m.formEditing = false
+			return m, m.focusCmd()
+		}
 		m.mode = modeList
 		return m, nil
 	case "up", "k", "shift+tab":
@@ -254,18 +258,17 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.focusIndex = 0
 		}
 		return m, m.focusCmd()
-	case "ctrl+s":
-		return m.submitForm(), nil
 	case "enter":
+		if m.focusIndex >= len(fields)-1 {
+			return m.submitForm(), nil
+		}
+		m.focusIndex++
+		return m, m.focusCmd()
+	case "i":
 		if m.isTextField(current) {
 			m.formEditing = true
 			return m, m.focusCmd()
 		}
-		m.focusIndex++
-		if m.focusIndex >= len(fields) {
-			m.focusIndex = 0
-		}
-		return m, m.focusCmd()
 	case " ":
 		if current == fieldImportant {
 			m.important = !m.important
@@ -909,7 +912,7 @@ func (m Model) viewModalBox() string {
 	}
 	lines = append(lines, "[enter] Next  [esc] Cancel")
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	hintText := "[↑/↓, j/k]: move fields  [enter]: edit  [esc]: exit edit/close  [ctrl+s]: save  [space]: toggle  date: h/l segment  +/- change  t current time  x clear"
+	hintText := "[↑/↓, j/k]: move fields  [i]: insert  [enter]: next/save  [esc]: exit/close  [space]: toggle  date: h/l segment  +/- change  t current time  x clear"
 	hintLines := []string{hintText}
 	innerHeight := boxH - 2
 	if innerHeight > 0 {
@@ -1097,8 +1100,8 @@ func (m Model) helpLines(width int) []string {
 		"- NI+NI (Not Important & Not Immediate): title, delete reason",
 		"",
 		"Form editing",
-		"- [↑/↓] or j/k: move fields, [enter] edit, [ctrl+s] save",
-		"- [esc] exit edit or close the form",
+		"- [↑/↓] or j/k: move fields, [i] insert, [enter] next/save",
+		"- [esc] exit insert or close the form",
 		"- [space]: toggle checkboxes",
 		"- Date fields: [h/l] move segment, [j/k] change value, [t] now, [x] clear",
 		"",
