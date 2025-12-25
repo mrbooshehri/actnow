@@ -1,4 +1,4 @@
-# iimq
+# actnow
 
 Terminal-based task manager for the Eisenhower Matrix, focused on the Important & Immediate quadrant.
 
@@ -9,16 +9,16 @@ Terminal-based task manager for the Eisenhower Matrix, focused on the Important 
 ## Build
 
 ```bash
-go build -o iimq ./cmd/iimq
+go build -o actnow ./cmd/actnow
 ```
 
 ## Run
 
 ```bash
-./iimq
+./actnow
 ```
 
-Tasks are stored locally at `~/.iimq/tasks.json`.
+Tasks are stored locally at `~/.actnow/tasks.json`.
 
 ## Keys
 

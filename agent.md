@@ -116,7 +116,7 @@ Choose **one**:
 
 Choose **one**:
 
-* JSON file in `$HOME/.iimq/tasks.json`
+* JSON file in `$HOME/.actnow/tasks.json`
 * BoltDB / bbolt
 
 ---
@@ -197,9 +197,9 @@ func Quadrant(t Task) string {
 ## CLI Commands (Optional)
 
 ```bash
-iimq add "Fix prod outage" --important --urgent
-iimq list --quadrant iim
-iimq done <task-id>
+actnow add "Fix prod outage" --important --urgent
+actnow list --quadrant iim
+actnow done <task-id>
 ```
 
 ---
@@ -207,9 +207,9 @@ iimq done <task-id>
 ## File Structure
 
 ```
-iimq/
+actnow/
 ├── cmd/
-│   └── iimq/
+│   └── actnow/
 │       └── main.go
 ├── internal/
 │   ├── model/
@@ -285,4 +285,3 @@ The app is considered successful when:
 ## Motto
 
 > "What is important and immediate must be done now — without friction."
-

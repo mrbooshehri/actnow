@@ -980,7 +980,7 @@ func (m Model) viewHelp() string {
 		height = 24
 	}
 
-	header := "HELP — Eisenhower (IIMQ)"
+	header := "HELP — Eisenhower (ActNow)"
 	footer := "[↑/↓, j/k] scroll  [h/esc/q] back"
 	usableHeight := height - 2
 	if usableHeight < 1 {

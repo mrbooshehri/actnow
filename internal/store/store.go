@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 )
 
-const dataDirName = ".iimq"
+const dataDirName = ".actnow"
 const dataFileName = "tasks.json"
 
 var ErrCorruptData = errors.New("stored tasks are corrupted")
