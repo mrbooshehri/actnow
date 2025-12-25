@@ -950,10 +950,11 @@ func (m Model) viewModalBox() string {
 		lines = append(lines, hintLines...)
 	}
 
-	border := lipgloss.RoundedBorder()
+	border := lipgloss.NormalBorder()
 	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	textStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 	content := strings.TrimRight(strings.Join(lines, "\n"), "\n")
+	content = padModalContent(content, 1, boxW-2)
 	return renderPanelBox(border, borderStyle, textStyle, boxW, boxH, title, content)
 }
 
@@ -1051,6 +1052,19 @@ func padToScreen(s string, width, height int) string {
 	lines := padToSize(s, width, height)
 	if len(lines) > height {
 		lines = lines[:height]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func padModalContent(content string, padding int, width int) string {
+	if padding <= 0 {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	pad := strings.Repeat(" ", padding)
+	for i := range lines {
+		lines[i] = pad + lines[i] + pad
+		lines[i] = fitLine(lines[i], width)
 	}
 	return strings.Join(lines, "\n")
 }
