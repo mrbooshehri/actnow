@@ -23,6 +23,7 @@ type mode int
 const (
 	modeList mode = iota
 	modeForm
+	modeHelp
 )
 
 type formKind int
@@ -121,6 +122,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateList(msg)
 		case modeForm:
 			return m.updateForm(msg)
+		case modeHelp:
+			return m.updateHelp(msg)
 		}
 	}
 
@@ -133,6 +136,8 @@ func (m Model) View() string {
 		return m.viewList()
 	case modeForm:
 		return m.viewOverlayForm()
+	case modeHelp:
+		return m.viewHelp()
 	default:
 		return ""
 	}
@@ -151,6 +156,9 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q":
 		return m, tea.Quit
+	case "h":
+		m.mode = modeHelp
+		return m, nil
 	case "up", "k":
 		if m.selected > 0 {
 			m.selected--
@@ -208,6 +216,9 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc", "ctrl+c":
 		m.mode = modeList
 		return m, nil
+	case "h":
+		m.mode = modeHelp
+		return m, nil
 	case "up", "shift+tab":
 		m.focusIndex--
 		if m.focusIndex < 0 {
@@ -257,6 +268,15 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if input := m.inputFor(current); input != nil {
 		*input, _ = input.Update(msg)
+	}
+	return m, nil
+}
+
+func (m Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q", "h":
+		m.mode = modeList
+		return m, nil
 	}
 	return m, nil
 }
@@ -867,6 +887,71 @@ func overlayCenter(base, modal string, width, height int) string {
 		baseLines[startY+i] = left + modalLines[i] + right
 	}
 	return strings.Join(baseLines, "\n")
+}
+
+func (m Model) viewHelp() string {
+	width := m.width
+	height := m.height
+	if width == 0 || height == 0 {
+		width = 80
+		height = 24
+	}
+
+	lines := []string{
+		"IIMQ Help",
+		"",
+		"Navigation",
+		"- [↑/↓] or k/j: move within a quadrant",
+		"- [tab]: switch quadrant",
+		"- [a]: add task, [e]: edit task, [d]: mark done, [x]: delete, [q]: quit",
+		"",
+		"Quadrants",
+		"- I+I (Important & Immediate): status, title, due/SLA, impact, next action",
+		"- I+NI (Important & Not Immediate): status, title, planned date, effort",
+		"- NI+I (Not Important & Immediate): status, title, due/SLA, delegate to",
+		"- NI+NI (Not Important & Not Immediate): title, delete reason",
+		"",
+		"Form editing",
+		"- [↑/↓]: move fields, [space]: toggle checkboxes",
+		"- Date fields: [h/l] move segment, [j/k] change value, [t] now, [x] clear",
+		"",
+		"Examples",
+		"1) I+I incident",
+		"   Title: Fix prod outage",
+		"   Impact: Revenue loss",
+		"   Next Action: Restart database",
+		"   Due/SLA: 2025-01-05 13:00",
+		"",
+		"2) I+NI plan",
+		"   Title: Write migration plan",
+		"   Planned Date: 2025-01-12 09:00",
+		"   Effort: 4h",
+		"",
+		"3) NI+I quick task",
+		"   Title: Renew SSL cert",
+		"   Delegate To: ops@team",
+		"   Due/SLA: 2025-01-07 10:00",
+		"",
+		"4) NI+NI cleanup",
+		"   Title: Remove old test data",
+		"   Delete Reason: Not needed",
+		"",
+		"Press [h], [esc], or [q] to return.",
+	}
+	content := strings.Join(lines, "\n")
+
+	border := lipgloss.RoundedBorder()
+	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	textStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	boxW := width - 4
+	boxH := height - 2
+	if boxW < 20 {
+		boxW = 20
+	}
+	if boxH < 10 {
+		boxH = 10
+	}
+	return renderPanelBox(border, borderStyle, textStyle, boxW, boxH, "HELP", content)
 }
 
 func padToSize(s string, width, height int) []string {
