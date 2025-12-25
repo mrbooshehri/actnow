@@ -515,6 +515,7 @@ func (m Model) viewList() string {
 		indices := m.indicesByQuadrant(q)
 		lines := make([]string, 0, len(indices)+1)
 		title := strings.ToUpper(quadrants[q])
+		borderColor, textColor := quadrantColors(q)
 		if len(indices) == 0 {
 			lines = append(lines, "(no tasks)")
 		} else {
@@ -535,11 +536,11 @@ func (m Model) viewList() string {
 				if task.DueAt != nil {
 					due = " (due " + task.DueAt.Format("2006-01-02 15:04") + ")"
 				}
-				lines = append(lines, fmt.Sprintf("%s %s %s%s", cursor, statusMark, task.Title, due))
+				statusStyle := lipgloss.NewStyle().Foreground(borderColor)
+				lines = append(lines, fmt.Sprintf("%s %s %s%s", cursor, statusStyle.Render(statusMark), task.Title, due))
 			}
 		}
 		content := strings.Join(lines, "\n")
-		borderColor, textColor := quadrantColors(q)
 		borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 		textStyle := lipgloss.NewStyle().Foreground(textColor)
 		boxBorder := border
