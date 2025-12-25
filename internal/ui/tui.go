@@ -292,10 +292,6 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
-
-	if input := m.inputFor(current); input != nil {
-		*input, _ = input.Update(msg)
-	}
 	return m, nil
 }
 
