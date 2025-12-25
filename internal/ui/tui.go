@@ -505,7 +505,7 @@ func (m Model) viewList() string {
 		}
 	}
 
-	border := lipgloss.RoundedBorder()
+	border := lipgloss.NormalBorder()
 	selectedBorder := lipgloss.ThickBorder()
 	selectedBorderStyle := lipgloss.NewStyle()
 	selectedTextStyle := lipgloss.NewStyle()
