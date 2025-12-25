@@ -1062,6 +1062,7 @@ func padModalContent(content string, padding int, width int) string {
 	}
 	lines := strings.Split(content, "\n")
 	pad := strings.Repeat(" ", padding)
+	lines = append([]string{""}, lines...)
 	for i := range lines {
 		lines[i] = pad + lines[i] + pad
 		lines[i] = fitLine(lines[i], width)
