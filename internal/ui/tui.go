@@ -865,18 +865,26 @@ func (m Model) viewModalBox() string {
 	}
 	lines = append(lines, "[enter] Next  [esc] Cancel")
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	hintLine := hintStyle.Render("[↑/↓]: move fields  [space]: toggle checkbox  [h/l]: date segment  [j/k]: change date  [t]: now  [x]: clear date")
+	hintText := "[↑/↓]: move fields  [space]: toggle checkbox  [h/l]: date segment  [j/k]: change date  [t]: now  [x]: clear date"
+	hintLines := []string{hintText}
 	innerHeight := boxH - 2
 	if innerHeight > 0 {
-		if len(lines) >= innerHeight {
-			lines = append(lines[:innerHeight-1], hintLine)
-		} else {
-			pad := innerHeight - 1 - len(lines)
-			for i := 0; i < pad; i++ {
-				lines = append(lines, "")
-			}
-			lines = append(lines, hintLine)
+		hintLines = flattenWrapped([]string{wrapLine(hintText, boxW-2)})
+		for i := range hintLines {
+			hintLines[i] = hintStyle.Render(hintLines[i])
 		}
+		need := len(hintLines)
+		if need == 0 {
+			need = 1
+			hintLines = []string{hintStyle.Render("")}
+		}
+		if len(lines)+need > innerHeight {
+			lines = lines[:max(0, innerHeight-need)]
+		}
+		for len(lines) < innerHeight-need {
+			lines = append(lines, "")
+		}
+		lines = append(lines, hintLines...)
 	}
 
 	border := lipgloss.RoundedBorder()
