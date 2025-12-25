@@ -506,8 +506,6 @@ func (m Model) viewList() string {
 	}
 
 	border := lipgloss.RoundedBorder()
-	baseBorderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	baseTextStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	selectedBorderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	selectedTextStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229"))
 
@@ -540,8 +538,9 @@ func (m Model) viewList() string {
 			}
 		}
 		content := strings.Join(lines, "\n")
-		borderStyle := baseBorderStyle
-		textStyle := baseTextStyle
+		borderColor, textColor := quadrantColors(q)
+		borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+		textStyle := lipgloss.NewStyle().Foreground(textColor)
 		if q == m.quadrant {
 			borderStyle = selectedBorderStyle
 			textStyle = selectedTextStyle
@@ -570,6 +569,19 @@ func (m Model) viewList() string {
 	bottomRow := lipgloss.JoinHorizontal(lipgloss.Top, boxes[2], strings.Repeat(" ", boxGap), boxes[3])
 	grid := lipgloss.JoinVertical(lipgloss.Left, topRow, bottomRow)
 	return lipgloss.JoinVertical(lipgloss.Left, grid, footer)
+}
+
+func quadrantColors(q int) (lipgloss.Color, lipgloss.Color) {
+	switch q {
+	case 0:
+		return lipgloss.Color("196"), lipgloss.Color("255")
+	case 1:
+		return lipgloss.Color("160"), lipgloss.Color("255")
+	case 2:
+		return lipgloss.Color("220"), lipgloss.Color("0")
+	default:
+		return lipgloss.Color("27"), lipgloss.Color("255")
+	}
 }
 
 func renderPanelBox(border lipgloss.Border, borderStyle, textStyle lipgloss.Style, width, height int, title, content string) string {
