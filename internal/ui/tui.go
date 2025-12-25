@@ -505,10 +505,10 @@ func (m Model) viewList() string {
 		}
 	}
 
-	border := lipgloss.RoundedBorder()
-	selectedBorder := lipgloss.DoubleBorder()
-	selectedBorderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	selectedTextStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	border := lipgloss.ThickBorder()
+	selectedBorder := lipgloss.ThickBorder()
+	selectedBorderStyle := lipgloss.NewStyle()
+	selectedTextStyle := lipgloss.NewStyle()
 
 	boxes := make([]string, 4)
 	for q := 0; q < 4; q++ {
@@ -544,9 +544,9 @@ func (m Model) viewList() string {
 		textStyle := lipgloss.NewStyle().Foreground(textColor)
 		boxBorder := border
 		if q == m.quadrant {
-			borderStyle = selectedBorderStyle
-			textStyle = selectedTextStyle
 			boxBorder = selectedBorder
+			borderStyle = selectedBorderStyle.Copy().Foreground(borderColor)
+			textStyle = selectedTextStyle.Copy().Foreground(textColor)
 		}
 		maxLines := boxH - 2
 		if maxLines < 1 {
