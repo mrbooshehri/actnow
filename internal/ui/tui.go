@@ -505,8 +505,11 @@ func (m Model) viewList() string {
 					cursor = ">"
 				}
 				statusMark := "[ ]"
-				if task.IsDone() {
+				switch task.Status {
+				case model.StatusDone:
 					statusMark = "[x]"
+				case model.StatusDeferred:
+					statusMark = "[-]"
 				}
 				due := ""
 				if task.DueAt != nil {
