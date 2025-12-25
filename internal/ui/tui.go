@@ -191,7 +191,11 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		idx := visible[m.selected]
-		m.tasks[idx].Status = model.StatusDone
+		if m.tasks[idx].Status == model.StatusDone {
+			m.tasks[idx].Status = model.StatusPending
+		} else {
+			m.tasks[idx].Status = model.StatusDone
+		}
 		m.saveTasks()
 	case "x":
 		if len(visible) == 0 {
