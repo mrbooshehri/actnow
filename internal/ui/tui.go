@@ -61,6 +61,7 @@ type Model struct {
 	deleteReasonInput textinput.Model
 	effortInput       textinput.Model
 	helpOffset        int
+	formEditing       bool
 }
 
 type formField int
@@ -225,23 +226,39 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	current := fields[m.focusIndex]
 
+	if m.formEditing {
+		switch msg.String() {
+		case "esc":
+			m.formEditing = false
+			return m, m.focusCmd()
+		}
+		if input := m.inputFor(current); input != nil {
+			*input, _ = input.Update(msg)
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "esc", "ctrl+c":
 		m.mode = modeList
 		return m, nil
-	case "up", "shift+tab":
+	case "up", "k", "shift+tab":
 		m.focusIndex--
 		if m.focusIndex < 0 {
 			m.focusIndex = len(fields) - 1
 		}
 		return m, m.focusCmd()
-	case "down", "tab":
+	case "down", "j", "tab":
 		m.focusIndex++
 		if m.focusIndex >= len(fields) {
 			m.focusIndex = 0
 		}
 		return m, m.focusCmd()
 	case "enter":
+		if m.isTextField(current) {
+			m.formEditing = true
+			return m, m.focusCmd()
+		}
 		if m.focusIndex >= len(fields)-1 {
 			return m.submitForm(), nil
 		}
@@ -309,6 +326,7 @@ func (m *Model) startForm(kind formKind, task model.Task) {
 	m.formKind = kind
 	m.editTaskID = task.ID
 	m.focusIndex = 0
+	m.formEditing = false
 
 	m.titleInput = newInput("Title", task.Title)
 	m.impactInput = newInput("Impact", task.Impact)
@@ -349,7 +367,11 @@ func (m *Model) focusCmd() tea.Cmd {
 		input.Blur()
 	}
 	if field := m.currentField(); field != nil {
-		if input := m.inputFor(*field); input != nil {
+		if m.formEditing {
+			if input := m.inputFor(*field); input != nil {
+				input.Focus()
+			}
+		} else if input := m.inputFor(*field); input != nil {
 			input.Focus()
 		}
 	}
@@ -648,6 +670,15 @@ func (m Model) formFields() []formField {
 	}
 }
 
+func (m Model) isTextField(field formField) bool {
+	switch field {
+	case fieldTitle, fieldImpact, fieldNextAction, fieldDelegate, fieldDeleteReason, fieldEffort:
+		return true
+	default:
+		return false
+	}
+}
+
 func (m Model) indexOfField(target formField) int {
 	fields := m.formFields()
 	for i, field := range fields {
@@ -815,11 +846,11 @@ func (m *Model) handleDatePicker(p *duePicker, key string) bool {
 			p.segment = 0
 		}
 		return true
-	case "k", "+":
+	case "+":
 		p.enabled = true
 		p.adjust(1)
 		return true
-	case "j", "-":
+	case "-":
 		p.enabled = true
 		p.adjust(-1)
 		return true
@@ -880,7 +911,7 @@ func (m Model) viewModalBox() string {
 	}
 	lines = append(lines, "[enter] Next  [esc] Cancel")
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	hintText := "[↑/↓]: move fields  [space]: toggle checkbox  [h/l]: date segment  [j/k]: change date  [t]: current time  [x]: clear date"
+	hintText := "[↑/↓, j/k]: move fields  [enter]: edit  [esc]: exit edit/close  [space]: toggle  date: h/l segment  +/- change  t current time  x clear"
 	hintLines := []string{hintText}
 	innerHeight := boxH - 2
 	if innerHeight > 0 {
