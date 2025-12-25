@@ -916,7 +916,7 @@ func (m Model) viewModalBox() string {
 	if boxW > width-4 {
 		boxW = width - 4
 	}
-	boxH := height / 2
+	boxH := height/2 + 1
 	if boxH < 10 {
 		boxH = 10
 	}
