@@ -979,6 +979,13 @@ func padToScreen(s string, width, height int) string {
 
 func (m Model) helpLines(width int) []string {
 	lines := []string{
+		"Important & Immediate (I+I) explained",
+		"- Important = real impact on goals, money, safety, or reputation",
+		"- Immediate = needs action within hours or today (hard deadline or blocker)",
+		"- If both are true, do it now before anything else",
+		"- If it's urgent but not important, delegate or minimize",
+		"- If it's important but not urgent, plan it",
+		"",
 		"Navigation",
 		"- [↑/↓] or k/j: move within a quadrant",
 		"- [tab]: switch quadrant",
