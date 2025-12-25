@@ -930,7 +930,12 @@ func (m Model) viewModalBox() string {
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 	hintText := "[↑/↓, j/k]: move fields  [i]: insert  [enter]: next/save  [esc]: exit/close  [space]: toggle  date: h/l segment  +/- change  t current time  x clear"
 	hintLines := []string{hintText}
-	innerHeight := boxH - 2
+	topPaddingLines := 1
+	innerHeight := boxH - 2 - topPaddingLines
+	if innerHeight < 1 {
+		innerHeight = 1
+		topPaddingLines = 0
+	}
 	if innerHeight > 0 {
 		hintLines = flattenWrapped([]string{wrapLine(hintText, boxW-2)})
 		for i := range hintLines {
@@ -948,6 +953,9 @@ func (m Model) viewModalBox() string {
 			lines = append(lines, "")
 		}
 		lines = append(lines, hintLines...)
+	}
+	for i := 0; i < topPaddingLines; i++ {
+		lines = append([]string{""}, lines...)
 	}
 
 	border := lipgloss.NormalBorder()
@@ -1062,7 +1070,6 @@ func padModalContent(content string, padding int, width int) string {
 	}
 	lines := strings.Split(content, "\n")
 	pad := strings.Repeat(" ", padding)
-	lines = append([]string{""}, lines...)
 	for i := range lines {
 		lines[i] = pad + lines[i] + pad
 		lines[i] = fitLine(lines[i], width)
