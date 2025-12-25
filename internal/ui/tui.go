@@ -12,6 +12,7 @@ import (
 	"github.com/mattn/go-runewidth"
 	"github.com/muesli/reflow/ansi"
 	"github.com/muesli/reflow/truncate"
+	"github.com/muesli/reflow/wordwrap"
 
 	"github.com/mrbooshehri/actNow/internal/engine"
 	"github.com/mrbooshehri/actNow/internal/model"
@@ -35,6 +36,7 @@ const (
 
 type Model struct {
 	mode              mode
+	prevMode          mode
 	formKind          formKind
 	focusIndex        int
 	store             *store.Store
@@ -58,6 +60,7 @@ type Model struct {
 	delegateInput     textinput.Model
 	deleteReasonInput textinput.Model
 	effortInput       textinput.Model
+	helpOffset        int
 }
 
 type formField int
@@ -115,6 +118,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.helpOffset = 0
 		return m, nil
 	case tea.KeyMsg:
 		switch m.mode {
@@ -157,7 +161,9 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+c", "q":
 		return m, tea.Quit
 	case "h":
+		m.prevMode = m.mode
 		m.mode = modeHelp
+		m.helpOffset = 0
 		return m, nil
 	case "up", "k":
 		if m.selected > 0 {
@@ -217,7 +223,9 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeList
 		return m, nil
 	case "h":
+		m.prevMode = m.mode
 		m.mode = modeHelp
+		m.helpOffset = 0
 		return m, nil
 	case "up", "shift+tab":
 		m.focusIndex--
@@ -275,9 +283,22 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "q", "h":
-		m.mode = modeList
+		if m.prevMode == 0 {
+			m.mode = modeList
+		} else {
+			m.mode = m.prevMode
+		}
 		return m, nil
+	case "up", "k":
+		m.helpOffset--
+	case "down", "j":
+		m.helpOffset++
+	case "pgup":
+		m.helpOffset -= 5
+	case "pgdown":
+		m.helpOffset += 5
 	}
+	m.helpOffset = clamp(m.helpOffset, 0, m.maxHelpOffset())
 	return m, nil
 }
 
@@ -427,7 +448,7 @@ func (m Model) viewList() string {
 		engine.QuadrantNotImportantImmediate,
 		engine.QuadrantNotImportantNot,
 	}
-	footer := "[a] Add  [e] Edit  [d] Done  [x] Delete  [tab] Next Quadrant  [q] Quit"
+	footer := "[a] Add  [e] Edit  [d] Done  [x] Delete  [tab] Next Quadrant  [h] Help  [q] Quit"
 
 	screenW := m.width
 	screenH := m.height
@@ -897,9 +918,67 @@ func (m Model) viewHelp() string {
 		height = 24
 	}
 
+	header := "HELP — Eisenhower (IIMQ)"
+	footer := "[↑/↓, j/k] scroll  [h/esc/q] back"
+	usableHeight := height - 2
+	if usableHeight < 1 {
+		usableHeight = 1
+	}
+
+	wrapped := m.helpLines(width)
+
+	offset := clamp(m.helpOffset, 0, max(0, len(wrapped)-usableHeight))
+	end := offset + usableHeight
+	if end > len(wrapped) {
+		end = len(wrapped)
+	}
+	view := wrapped[offset:end]
+	for len(view) < usableHeight {
+		view = append(view, "")
+	}
+
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
+	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	bodyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+
+	var b strings.Builder
+	b.WriteString(headerStyle.Render(header))
+	b.WriteString("\n")
+	for i := 0; i < usableHeight-1; i++ {
+		if i < len(view) {
+			b.WriteString(bodyStyle.Render(view[i]))
+		}
+		if i < usableHeight-2 {
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("\n")
+	b.WriteString(footerStyle.Render(footer))
+
+	return padToScreen(b.String(), width, height)
+}
+
+func padToSize(s string, width, height int) []string {
+	lines := strings.Split(s, "\n")
+	for i := range lines {
+		lines[i] = padLine(lines[i], width)
+	}
+	for len(lines) < height {
+		lines = append(lines, strings.Repeat(" ", width))
+	}
+	return lines
+}
+
+func padToScreen(s string, width, height int) string {
+	lines := padToSize(s, width, height)
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) helpLines(width int) []string {
 	lines := []string{
-		"IIMQ Help",
-		"",
 		"Navigation",
 		"- [↑/↓] or k/j: move within a quadrant",
 		"- [tab]: switch quadrant",
@@ -935,34 +1014,35 @@ func (m Model) viewHelp() string {
 		"4) NI+NI cleanup",
 		"   Title: Remove old test data",
 		"   Delete Reason: Not needed",
-		"",
-		"Press [h], [esc], or [q] to return.",
 	}
-	content := strings.Join(lines, "\n")
 
-	border := lipgloss.RoundedBorder()
-	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-	textStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
-	boxW := width - 4
-	boxH := height - 2
-	if boxW < 20 {
-		boxW = 20
+	wrapped := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if line == "" {
+			wrapped = append(wrapped, "")
+			continue
+		}
+		wrapped = append(wrapped, wrapLine(line, width))
 	}
-	if boxH < 10 {
-		boxH = 10
-	}
-	return renderPanelBox(border, borderStyle, textStyle, boxW, boxH, "HELP", content)
+	return flattenWrapped(wrapped)
 }
 
-func padToSize(s string, width, height int) []string {
-	lines := strings.Split(s, "\n")
-	for i := range lines {
-		lines[i] = padLine(lines[i], width)
+func (m Model) maxHelpOffset() int {
+	width := m.width
+	height := m.height
+	if width == 0 || height == 0 {
+		width = 80
+		height = 24
 	}
-	for len(lines) < height {
-		lines = append(lines, strings.Repeat(" ", width))
+	usableHeight := height - 2
+	if usableHeight < 1 {
+		usableHeight = 1
 	}
-	return lines
+	lines := m.helpLines(width)
+	if len(lines) <= usableHeight {
+		return 0
+	}
+	return len(lines) - usableHeight
 }
 
 func padLine(s string, width int) string {
@@ -1031,6 +1111,42 @@ func splitByWidth(s string, start, width int) (string, string) {
 		i += size
 	}
 	return left.String(), right.String()
+}
+
+func wrapLine(s string, width int) string {
+	if width <= 0 {
+		return s
+	}
+	return wordwrap.String(s, width)
+}
+
+func flattenWrapped(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.Contains(line, "\n") {
+			out = append(out, strings.Split(line, "\n")...)
+		} else {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+func clamp(v, minVal, maxVal int) int {
+	if v < minVal {
+		return minVal
+	}
+	if v > maxVal {
+		return maxVal
+	}
+	return v
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func readANSI(s string) (string, int) {
