@@ -234,6 +234,7 @@ func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if input := m.inputFor(current); input != nil {
 			*input, _ = input.Update(msg)
+			input.SetCursor(len([]rune(input.Value())))
 		}
 		return m, nil
 	}
@@ -777,8 +778,20 @@ func (m Model) textFieldLines(field formField, label string, input *textinput.Mo
 			available = 1
 		}
 		input.Width = available
-		line := prefix + input.View()
-		return []string{fitLine(line, maxWidth)}
+		value := input.Value()
+		cursor := lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Render("▏")
+		display := value + cursor
+		segments := wrapLineHard(display, available)
+		lines := make([]string, 0, len(segments))
+		for i, seg := range segments {
+			if i == 0 {
+				lines = append(lines, fitLine(prefix+seg, maxWidth))
+				continue
+			}
+			indent := strings.Repeat(" ", prefixWidth)
+			lines = append(lines, fitLine(indent+seg, maxWidth))
+		}
+		return lines
 	}
 
 	value := input.Value()
