@@ -785,8 +785,7 @@ func (m Model) textFieldLines(field formField, label string, input *textinput.Mo
 	if value == "" {
 		return []string{fitLine(prefix, maxWidth)}
 	}
-	wrapped := wrapLine(value, available)
-	segments := flattenWrapped([]string{wrapped})
+	segments := wrapLineHard(value, available)
 	lines := make([]string, 0, len(segments))
 	for i, seg := range segments {
 		if i == 0 {
@@ -1319,6 +1318,49 @@ func wrapLine(s string, width int) string {
 	return wordwrap.String(s, width)
 }
 
+func wrapLineHard(s string, width int) []string {
+	if width <= 0 {
+		return []string{s}
+	}
+	wrapped := wrapLine(s, width)
+	lines := flattenWrapped([]string{wrapped})
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if ansi.PrintableRuneWidth(line) <= width {
+			out = append(out, line)
+			continue
+		}
+		out = append(out, hardWrapPlain(line, width)...)
+	}
+	if len(out) == 0 {
+		return []string{""}
+	}
+	return out
+}
+
+func hardWrapPlain(s string, width int) []string {
+	if width <= 0 {
+		return []string{s}
+	}
+	var lines []string
+	var b strings.Builder
+	cur := 0
+	for _, r := range s {
+		rw := runewidth.RuneWidth(r)
+		if cur+rw > width && cur > 0 {
+			lines = append(lines, b.String())
+			b.Reset()
+			cur = 0
+		}
+		b.WriteRune(r)
+		cur += rw
+	}
+	if b.Len() > 0 || len(lines) == 0 {
+		lines = append(lines, b.String())
+	}
+	return lines
+}
+
 func wrapTaskLine(prefix, text string, maxWidth int) []string {
 	if maxWidth <= 0 {
 		return []string{prefix + " " + text}
@@ -1328,8 +1370,7 @@ func wrapTaskLine(prefix, text string, maxWidth int) []string {
 	if available < 4 {
 		return []string{fitLine(prefix+" "+text, maxWidth)}
 	}
-	wrapped := wrapLine(text, available)
-	segments := flattenWrapped([]string{wrapped})
+	segments := wrapLineHard(text, available)
 	lines := make([]string, 0, len(segments))
 	for i, seg := range segments {
 		if i == 0 {
