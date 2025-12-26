@@ -773,6 +773,10 @@ func (m Model) textFieldLines(field formField, label string, input *textinput.Mo
 	}
 
 	if isEditing {
+		if available < 1 {
+			available = 1
+		}
+		input.Width = available
 		line := prefix + input.View()
 		return []string{fitLine(line, maxWidth)}
 	}
