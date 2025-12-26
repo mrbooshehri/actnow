@@ -537,7 +537,10 @@ func (m Model) viewList() string {
 					due = " (due " + task.DueAt.Format("2006-01-02 15:04") + ")"
 				}
 				statusStyle := lipgloss.NewStyle().Foreground(borderColor)
-				lines = append(lines, fmt.Sprintf("%s %s %s%s", cursor, statusStyle.Render(statusMark), task.Title, due))
+				prefix := fmt.Sprintf("%s %s", cursor, statusStyle.Render(statusMark))
+				text := fmt.Sprintf("%s%s", task.Title, due)
+				wrapped := wrapTaskLine(prefix, text, boxW-2)
+				lines = append(lines, wrapped...)
 			}
 		}
 		content := strings.Join(lines, "\n")
@@ -717,37 +720,79 @@ func (m Model) currentField() *formField {
 	return &fields[m.focusIndex]
 }
 
-func (m Model) formFieldLine(field formField) string {
+func (m Model) formFieldLines(field formField, maxWidth int) []string {
 	switch field {
 	case fieldStatus:
-		return m.formLine(fieldStatus, "Status", m.statusDisplay())
+		return []string{m.formLine(fieldStatus, "Status", m.statusDisplay())}
 	case fieldTitle:
-		return m.formLine(fieldTitle, "Title", m.titleInput.View())
+		return m.textFieldLines(fieldTitle, "Title", &m.titleInput, maxWidth)
 	case fieldImportant:
-		return m.formLine(fieldImportant, "Important", checkbox(m.important))
+		return []string{m.formLine(fieldImportant, "Important", checkbox(m.important))}
 	case fieldUrgent:
-		return m.formLine(fieldUrgent, "Urgent", checkbox(m.urgent))
+		return []string{m.formLine(fieldUrgent, "Urgent", checkbox(m.urgent))}
 	case fieldDue:
-		return m.formLine(fieldDue, "Due/SLA", m.duePicker.String())
+		return []string{m.formLine(fieldDue, "Due/SLA", m.duePicker.String())}
 	case fieldImpact:
-		return m.formLine(fieldImpact, "Impact", m.impactInput.View())
+		return m.textFieldLines(fieldImpact, "Impact", &m.impactInput, maxWidth)
 	case fieldNextAction:
-		return m.formLine(fieldNextAction, "Next Action", m.nextActionInput.View())
+		return m.textFieldLines(fieldNextAction, "Next Action", &m.nextActionInput, maxWidth)
 	case fieldPlanned:
-		return m.formLine(fieldPlanned, "Planned Date", m.plannedPicker.String())
+		return []string{m.formLine(fieldPlanned, "Planned Date", m.plannedPicker.String())}
 	case fieldEffort:
-		return m.formLine(fieldEffort, "Effort", m.effortInput.View())
+		return m.textFieldLines(fieldEffort, "Effort", &m.effortInput, maxWidth)
 	case fieldDelegate:
-		return m.formLine(fieldDelegate, "Delegate To", m.delegateInput.View())
+		return m.textFieldLines(fieldDelegate, "Delegate To", &m.delegateInput, maxWidth)
 	case fieldDeleteReason:
-		return m.formLine(fieldDeleteReason, "Delete Reason", m.deleteReasonInput.View())
+		return m.textFieldLines(fieldDeleteReason, "Delete Reason", &m.deleteReasonInput, maxWidth)
 	default:
-		return ""
+		return []string{""}
 	}
 }
 
 func (m Model) statusDisplay() string {
 	return "[" + m.statusOrDefault() + "]"
+}
+
+func (m Model) textFieldLines(field formField, label string, input *textinput.Model, maxWidth int) []string {
+	current := m.currentField()
+	isEditing := current != nil && *current == field && m.formEditing
+
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	cursor := " "
+	if current != nil && *current == field {
+		cursor = ">"
+	}
+	prefix := fmt.Sprintf("%s %s: ", cursor, labelStyle.Render(label))
+	prefixWidth := ansi.PrintableRuneWidth(prefix)
+	if maxWidth <= 0 {
+		maxWidth = 10
+	}
+	available := maxWidth - prefixWidth
+	if available < 4 {
+		return []string{fitLine(prefix+input.Value(), maxWidth)}
+	}
+
+	if isEditing {
+		line := prefix + input.View()
+		return []string{fitLine(line, maxWidth)}
+	}
+
+	value := input.Value()
+	if value == "" {
+		return []string{fitLine(prefix, maxWidth)}
+	}
+	wrapped := wrapLine(value, available)
+	segments := flattenWrapped([]string{wrapped})
+	lines := make([]string, 0, len(segments))
+	for i, seg := range segments {
+		if i == 0 {
+			lines = append(lines, fitLine(prefix+seg, maxWidth))
+			continue
+		}
+		indent := strings.Repeat(" ", prefixWidth)
+		lines = append(lines, fitLine(indent+seg, maxWidth))
+	}
+	return lines
 }
 
 func (m Model) statusOrDefault() string {
@@ -924,7 +969,8 @@ func (m Model) viewModalBox() string {
 	fields := m.formFields()
 	lines := make([]string, 0, len(fields)+2)
 	for _, field := range fields {
-		lines = append(lines, m.formFieldLine(field))
+		fieldLines := m.formFieldLines(field, boxW-2)
+		lines = append(lines, fieldLines...)
 	}
 	lines = append(lines, "[enter] Next  [esc] Cancel")
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
@@ -1267,6 +1313,29 @@ func wrapLine(s string, width int) string {
 		return s
 	}
 	return wordwrap.String(s, width)
+}
+
+func wrapTaskLine(prefix, text string, maxWidth int) []string {
+	if maxWidth <= 0 {
+		return []string{prefix + " " + text}
+	}
+	prefixWidth := ansi.PrintableRuneWidth(prefix)
+	available := maxWidth - prefixWidth - 1
+	if available < 4 {
+		return []string{fitLine(prefix+" "+text, maxWidth)}
+	}
+	wrapped := wrapLine(text, available)
+	segments := flattenWrapped([]string{wrapped})
+	lines := make([]string, 0, len(segments))
+	for i, seg := range segments {
+		if i == 0 {
+			lines = append(lines, fitLine(prefix+" "+seg, maxWidth))
+			continue
+		}
+		indent := strings.Repeat(" ", prefixWidth+1)
+		lines = append(lines, fitLine(indent+seg, maxWidth))
+	}
+	return lines
 }
 
 func flattenWrapped(lines []string) []string {
