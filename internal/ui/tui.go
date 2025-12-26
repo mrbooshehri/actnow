@@ -1352,10 +1352,10 @@ func hardWrapPlain(s string, width int) []string {
 		rw := runewidth.RuneWidth(r)
 		if cur+rw > width && cur > 0 {
 			line := b.String()
-			if ansi.PrintableRuneWidth(line) >= width {
-				line = truncate.String(line, uint(width-1)) + "-"
+			if ansi.PrintableRuneWidth(line) >= width-1 {
+				line = truncate.String(line, uint(width-2)) + "- "
 			} else {
-				line = line + "-"
+				line = line + "- "
 			}
 			lines = append(lines, line)
 			b.Reset()
