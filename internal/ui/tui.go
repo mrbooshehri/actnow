@@ -41,6 +41,7 @@ type Model struct {
 	focusIndex        int
 	store             *store.Store
 	tasks             []model.Task
+	deletedTasks      []deletedTask
 	selected          int
 	quadrant          int
 	statusMsg         string
@@ -62,6 +63,12 @@ type Model struct {
 	effortInput       textinput.Model
 	helpOffset        int
 	formEditing       bool
+}
+
+type deletedTask struct {
+	task     model.Task
+	index    int
+	quadrant int
 }
 
 type formField int
@@ -205,15 +212,65 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(visible) == 0 {
 			return m, nil
 		}
-		idx := visible[m.selected]
-		m.tasks = append(m.tasks[:idx], m.tasks[idx+1:]...)
-		if m.selected > 0 && m.selected >= len(visible)-1 {
-			m.selected--
-		}
-		m.saveTasks()
+		m.deleteTask(visible[m.selected], len(visible))
+	case "u":
+		m.undoDelete()
 	}
 
 	return m, nil
+}
+
+func (m *Model) deleteTask(idx, visibleCount int) {
+	task := m.tasks[idx]
+	m.deletedTasks = append(m.deletedTasks, deletedTask{
+		task:     task,
+		index:    idx,
+		quadrant: m.quadrant,
+	})
+	m.tasks = append(m.tasks[:idx], m.tasks[idx+1:]...)
+	if m.selected > 0 && m.selected >= visibleCount-1 {
+		m.selected--
+	}
+	m.saveTasks()
+	if !m.statusIsErr {
+		m.setStatusInfo(fmt.Sprintf("Deleted %q. Press u to undo.", task.Title))
+	}
+}
+
+func (m *Model) undoDelete() {
+	if len(m.deletedTasks) == 0 {
+		m.setStatusInfo("Nothing to undo")
+		return
+	}
+
+	last := m.deletedTasks[len(m.deletedTasks)-1]
+	m.deletedTasks = m.deletedTasks[:len(m.deletedTasks)-1]
+
+	idx := clamp(last.index, 0, len(m.tasks))
+	m.tasks = append(m.tasks, model.Task{})
+	copy(m.tasks[idx+1:], m.tasks[idx:])
+	m.tasks[idx] = last.task
+
+	m.quadrant = last.quadrant
+	m.selected = m.visiblePosition(last.task.ID, last.quadrant)
+	m.saveTasks()
+	if !m.statusIsErr {
+		m.setStatusInfo(fmt.Sprintf("Restored %q", last.task.Title))
+	}
+}
+
+func (m Model) visiblePosition(taskID string, quadrant int) int {
+	position := 0
+	for _, task := range m.tasks {
+		if engine.QuadrantIndex(task) != quadrant {
+			continue
+		}
+		if task.ID == taskID {
+			return position
+		}
+		position++
+	}
+	return 0
 }
 
 func (m Model) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -445,6 +502,11 @@ func (m *Model) saveTasks() {
 	m.lastSaveTime = time.Now()
 }
 
+func (m *Model) setStatusInfo(msg string) {
+	m.statusMsg = msg
+	m.statusIsErr = false
+}
+
 func (m *Model) setStatusErr(msg string) {
 	m.statusMsg = msg
 	m.statusIsErr = true
@@ -474,7 +536,7 @@ func (m Model) viewList() string {
 		engine.QuadrantNotImportantImmediate,
 		engine.QuadrantNotImportantNot,
 	}
-	footer := "[↑/↓ or j/k] Move  [a] Add  [e] Edit  [d] Done  [x] Delete  [tab] Next Quadrant  [shift+tab] Prev  [h] Help  [q] Quit"
+	footer := "[↑/↓ or j/k] Move  [a] Add  [e] Edit  [d] Done  [x] Delete  [u] Undo  [tab] Next Quadrant  [shift+tab] Prev  [h] Help  [q] Quit"
 
 	screenW := m.width
 	screenH := m.height
@@ -494,6 +556,9 @@ func (m Model) viewList() string {
 		}
 	}
 	footerLines := 1
+	if m.statusMsg != "" {
+		footerLines++
+	}
 	available := screenH - footerLines
 	boxH := available / 2
 	if boxH < 5 {
@@ -576,7 +641,20 @@ func (m Model) viewList() string {
 	topRow := lipgloss.JoinHorizontal(lipgloss.Top, boxes[0], strings.Repeat(" ", boxGap), boxes[1])
 	bottomRow := lipgloss.JoinHorizontal(lipgloss.Top, boxes[2], strings.Repeat(" ", boxGap), boxes[3])
 	grid := lipgloss.JoinVertical(lipgloss.Left, topRow, bottomRow)
-	return lipgloss.JoinVertical(lipgloss.Left, grid, footer)
+	lines := []string{grid}
+	if m.statusMsg != "" {
+		lines = append(lines, m.statusLine(screenW))
+	}
+	lines = append(lines, footer)
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+func (m Model) statusLine(width int) string {
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	if m.statusIsErr {
+		style = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	}
+	return style.Render(fitLine(m.statusMsg, width))
 }
 
 func quadrantColors(q int) (lipgloss.Color, lipgloss.Color) {
@@ -1191,7 +1269,7 @@ func (m Model) helpLines(width int) []string {
 		"Navigation",
 		"- [↑/↓] or k/j: move within a quadrant",
 		"- [tab]: switch quadrant",
-		"- [a]: add task, [e]: edit task, [d]: mark done, [x]: delete, [q]: quit",
+		"- [a]: add task, [e]: edit task, [d]: mark done, [x]: delete, [u]: undo delete, [q]: quit",
 		"",
 		"Quadrants",
 		"- I+I (Important & Immediate): status, title, due/SLA, impact, next action",
@@ -1203,7 +1281,7 @@ func (m Model) helpLines(width int) []string {
 		"- [↑/↓] or j/k: move fields, [i] insert, [enter] next/save",
 		"- [esc] exit insert or close the form",
 		"- [space]: toggle checkboxes",
-		"- Date fields: [h/l] move segment, [j/k] change value, [t] now, [x] clear",
+		"- Date fields: [h/l] move segment, [+/-] change value, [t] now, [x] clear",
 		"",
 		"Examples",
 		"1) I+I incident",

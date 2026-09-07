@@ -34,6 +34,7 @@ Data is stored at `~/.actnow/tasks.json`.
 - `e`: Edit task
 - `d`: Toggle done/undone
 - `x`: Delete task
+- `u`: Undo last delete
 - `h`: Help
 - `q`: Quit
 
